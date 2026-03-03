@@ -10,8 +10,9 @@ def create_sale(db: Session, sale: SaleCreate):
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
         
-    if product.quantity < sale.quantity:
-        raise HTTPException(status_code=400, detail="Not enough inventory")
+    # Allow negative inventory as per user request (Overselling)
+    # if product.quantity < sale.quantity:
+    #     raise HTTPException(status_code=400, detail="Not enough inventory")
         
     total_value = product.selling_price * sale.quantity
     

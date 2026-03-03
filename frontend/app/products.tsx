@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Modal, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Modal, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useStore, Product } from '../store/useStore';
 import { api } from '../services/api';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -146,25 +146,27 @@ export default function ProductsScreen() {
             />
 
             <Modal visible={modalVisible} transparent={true} animationType="fade">
-                <View style={styles.modalOverlay}>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
                     <Card style={styles.modalCard}>
-                        <Text style={styles.modalTitle}>{editingId ? 'Editar Produto' : 'Novo Produto'}</Text>
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            <Text style={styles.modalTitle}>{editingId ? 'Editar Produto' : 'Novo Produto'}</Text>
 
-                        <Input label="Nome do Produto" value={name} onChangeText={setName} />
-                        <Input label="Variação / Tamanho (Opcional)" value={variation} onChangeText={setVariation} placeholder="Ex: G, Jeans 40, Azul..." />
-                        <Input label="Quantidade em Estoque" keyboardType="numeric" value={quantity} onChangeText={setQuantity} />
-                        <View style={{ flexDirection: 'row', gap: 12 }}>
-                            <Input style={{ flex: 1 }} label="Preço de Custo (R$)" keyboardType="numeric" value={costPrice} onChangeText={setCostPrice} />
-                            <Input style={{ flex: 1 }} label="Preço de Venda (R$)" keyboardType="numeric" value={sellingPrice} onChangeText={setSellingPrice} />
-                        </View>
+                            <Input label="Nome do Produto" value={name} onChangeText={setName} />
+                            <Input label="Variação / Tamanho (Opcional)" value={variation} onChangeText={setVariation} placeholder="Ex: G, Jeans 40, Azul..." />
+                            <Input label="Quantidade em Estoque" keyboardType="numeric" value={quantity} onChangeText={setQuantity} />
+                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                <Input style={{ flex: 1 }} label="Preço de Custo (R$)" keyboardType="numeric" value={costPrice} onChangeText={setCostPrice} />
+                                <Input style={{ flex: 1 }} label="Preço de Venda (R$)" keyboardType="numeric" value={sellingPrice} onChangeText={setSellingPrice} />
+                            </View>
 
-                        <View style={styles.modalActions}>
-                            <Button variant="outline" onPress={() => setModalVisible(false)} title="Cancelar" style={{ flex: 1 }} />
-                            <View style={{ width: 12 }} />
-                            <Button onPress={saveProduct} title="Salvar" style={{ flex: 1 }} />
-                        </View>
+                            <View style={styles.modalActions}>
+                                <Button variant="outline" onPress={() => setModalVisible(false)} title="Cancelar" style={{ flex: 1 }} />
+                                <View style={{ width: 12 }} />
+                                <Button onPress={saveProduct} title="Salvar" style={{ flex: 1 }} />
+                            </View>
+                        </ScrollView>
                     </Card>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
         </View>
     );
@@ -186,7 +188,7 @@ const styles = StyleSheet.create({
     actionColumn: { flexDirection: 'column', gap: 8, paddingLeft: 16, borderLeftWidth: 1, borderColor: '#f4f4f5' },
 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
-    modalCard: { width: '100%', maxWidth: 500, padding: 24 },
+    modalCard: { width: '100%', maxWidth: 500, maxHeight: '90%', padding: 24, paddingBottom: 16 },
     modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#09090b', marginBottom: 24 },
     modalActions: { flexDirection: 'row', marginTop: 16 }
 });

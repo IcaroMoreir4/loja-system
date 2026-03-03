@@ -84,10 +84,11 @@ export default function SalesScreen() {
         }
 
         const prod = selectedProduct;
-        if (!prod || prod.quantity < qty) {
-            alert(`Estoque insuficiente. Disponível: ${prod ? prod.quantity : 0}`);
-            return;
-        }
+        // Permite estoque negativo a pedido do usuario
+        // if (!prod || prod.quantity < qty) {
+        //     alert(`Estoque insuficiente. Disponível: ${prod ? prod.quantity : 0}`);
+        //     return;
+        // }
 
         const required = calcTotalRequired();
         const inputted = calcTotalInputted();
@@ -116,6 +117,7 @@ export default function SalesScreen() {
             });
             alert('Venda Múltipla Registrada!');
             setQuantity('1');
+            setSelectedProduct(null); // Reseta para forçar a UI a mostrar o estoque atualizado na próxima vez
             setPixAmount(''); setCashAmount(''); setCardAmount(''); setFiadoAmount(''); setFiadoCustomer('');
             fetchProducts();
             fetchSales();
@@ -170,10 +172,10 @@ export default function SalesScreen() {
                 </View>
             </View>
 
-            <View style={[styles.layoutColumns, isMobile && { flexDirection: 'column' }]}>
+            <View style={styles.layoutColumns}>
                 {/* Left Column: Form */}
-                <ScrollView style={[styles.leftColumn, isMobile && { borderRightWidth: 0, minWidth: '100%', flexBasis: 'auto' }]} contentContainerStyle={{ padding: isMobile ? 12 : 24 }}>
-                    <Card style={{ padding: isMobile ? 16 : 24 }}>
+                <ScrollView style={styles.leftColumn} contentContainerStyle={{ padding: 16 }}>
+                    <Card style={{ padding: 16 }}>
                         <Text style={styles.sectionTitle}>Produto</Text>
 
                         <View style={styles.pickerWrapper}>
@@ -234,7 +236,7 @@ export default function SalesScreen() {
                 </ScrollView>
 
                 {/* Right Column: History */}
-                <View style={[styles.rightColumn, isMobile && { minWidth: '100%', padding: isMobile ? 12 : 24 }]}>
+                <View style={styles.rightColumn}>
                     <Text style={styles.sectionTitle}>Últimas Vendas</Text>
                     <FlatList
                         data={sales}
@@ -308,8 +310,8 @@ const styles = StyleSheet.create({
     subtitle: { fontSize: 16, color: '#71717a', marginTop: 4 },
 
     layoutColumns: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
-    leftColumn: { flexBasis: 500, flexGrow: 1, borderRightWidth: 1, borderColor: '#e4e4e7' },
-    rightColumn: { flexBasis: 400, flexGrow: 1, padding: 24, backgroundColor: '#fafafa' },
+    leftColumn: { minWidth: 280, flexBasis: 400, flexGrow: 1, borderRightWidth: 1, borderColor: '#e4e4e7' },
+    rightColumn: { minWidth: 280, flexBasis: 300, flexGrow: 1, padding: 16, backgroundColor: '#fafafa' },
 
     sectionTitle: { fontSize: 18, fontWeight: '600', color: '#09090b', marginBottom: 16 },
     pickerWrapper: { borderWidth: 1, borderColor: '#e4e4e7', borderRadius: 8, backgroundColor: '#fff', marginBottom: 16 },
