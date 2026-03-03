@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, FlatList, Modal, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, FlatList, Modal, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { useStore, Product } from '../store/useStore';
 import { api } from '../services/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
@@ -9,6 +9,9 @@ import { Badge } from '../components/ui/Badge';
 import { MaterialIcons } from '@expo/vector-icons';
 
 export default function SalesScreen() {
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
+
     const { products, fetchProducts, fetchDashboard } = useStore();
     const [sales, setSales] = useState<any[]>([]);
 
@@ -167,10 +170,10 @@ export default function SalesScreen() {
                 </View>
             </View>
 
-            <View style={styles.layoutColumns}>
+            <View style={[styles.layoutColumns, isMobile && { flexDirection: 'column' }]}>
                 {/* Left Column: Form */}
-                <ScrollView style={styles.leftColumn} contentContainerStyle={{ padding: 24 }}>
-                    <Card style={{ padding: 24 }}>
+                <ScrollView style={[styles.leftColumn, isMobile && { borderRightWidth: 0, minWidth: '100%', flexBasis: 'auto' }]} contentContainerStyle={{ padding: isMobile ? 12 : 24 }}>
+                    <Card style={{ padding: isMobile ? 16 : 24 }}>
                         <Text style={styles.sectionTitle}>Produto</Text>
 
                         <View style={styles.pickerWrapper}>
@@ -231,7 +234,7 @@ export default function SalesScreen() {
                 </ScrollView>
 
                 {/* Right Column: History */}
-                <View style={styles.rightColumn}>
+                <View style={[styles.rightColumn, isMobile && { minWidth: '100%', padding: isMobile ? 12 : 24 }]}>
                     <Text style={styles.sectionTitle}>Últimas Vendas</Text>
                     <FlatList
                         data={sales}
@@ -305,8 +308,8 @@ const styles = StyleSheet.create({
     subtitle: { fontSize: 16, color: '#71717a', marginTop: 4 },
 
     layoutColumns: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
-    leftColumn: { flexBasis: 500, flexGrow: 1, minWidth: 300, borderRightWidth: 1, borderColor: '#e4e4e7' },
-    rightColumn: { flexBasis: 400, flexGrow: 1, minWidth: 300, padding: 24, backgroundColor: '#fafafa' },
+    leftColumn: { flexBasis: 500, flexGrow: 1, borderRightWidth: 1, borderColor: '#e4e4e7' },
+    rightColumn: { flexBasis: 400, flexGrow: 1, padding: 24, backgroundColor: '#fafafa' },
 
     sectionTitle: { fontSize: 18, fontWeight: '600', color: '#09090b', marginBottom: 16 },
     pickerWrapper: { borderWidth: 1, borderColor: '#e4e4e7', borderRadius: 8, backgroundColor: '#fff', marginBottom: 16 },
