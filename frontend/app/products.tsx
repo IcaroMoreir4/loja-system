@@ -19,6 +19,8 @@ export default function ProductsScreen() {
     const [costPrice, setCostPrice] = useState('');
     const [sellingPrice, setSellingPrice] = useState('');
 
+    const [searchQuery, setSearchQuery] = useState('');
+
     useEffect(() => {
         fetchProducts();
     }, []);
@@ -122,13 +124,25 @@ export default function ProductsScreen() {
                 <Button onPress={() => openModal()} title="+ Novo Produto" />
             </View>
 
+            <View style={{ paddingHorizontal: 24, paddingBottom: 16 }}>
+                <Input
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="Buscar por nome ou variação..."
+                />
+            </View>
+
             <FlatList
-                data={products}
+                data={products.filter(p => {
+                    const q = searchQuery.toLowerCase();
+                    return p.name.toLowerCase().includes(q) || (p.variation && p.variation.toLowerCase().includes(q));
+                })}
                 keyExtractor={item => String(item.id)}
                 renderItem={renderItem}
                 contentContainerStyle={styles.listContainer}
                 refreshing={isLoading}
                 onRefresh={fetchProducts}
+                ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#71717a', paddingTop: 24 }}>Nenhum produto encontrado na busca.</Text>}
             />
 
             <Modal visible={modalVisible} transparent={true} animationType="fade">
