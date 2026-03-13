@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Modal, ScrollView, Alert, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, useWindowDimensions } from 'react-native';
 import { useStore } from '../store/useStore';
 import { api } from '../services/api';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
+import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
+import { ResponsiveModal } from '../components/ui/ResponsiveModal';
 
 export default function CreditsScreen() {
     const { products, fetchProducts, fetchDashboard } = useStore();
@@ -23,13 +24,13 @@ export default function CreditsScreen() {
     useEffect(() => {
         fetchProducts();
         fetchCredits();
-    }, []);
+    }, [fetchProducts]);
 
     const fetchCredits = async () => {
         try {
             const { data } = await api.get('/credits/');
             setCredits(data);
-        } catch (error) { }
+        } catch { }
     };
 
     const getStatusBadge = (status: string) => {
@@ -78,7 +79,7 @@ export default function CreditsScreen() {
                     await api.delete(`/credits/payments/${paymentId}`);
                     fetchCredits();
                     fetchDashboard();
-                } catch (e) {
+                } catch {
                     setAlertMessage('Erro ao estornar pagamento');
                 }
                 setConfirmAction(null);
@@ -95,7 +96,7 @@ export default function CreditsScreen() {
                     fetchCredits();
                     fetchProducts();
                     fetchDashboard();
-                } catch (e) {
+                } catch {
                     setAlertMessage('Erro ao excluir');
                 }
                 setConfirmAction(null);
@@ -175,56 +176,59 @@ export default function CreditsScreen() {
                 contentContainerStyle={{ padding: isMobile ? 12 : 24, paddingBottom: 64 }}
             />
 
-            <Modal visible={modalVisible} transparent={true} animationType="fade">
-                <View style={[styles.modalOverlay, { zIndex: 999 }]}>
-                    <Card style={{ ...styles.modalCard as any, maxWidth: 400, alignItems: 'center', padding: isMobile ? 20 : 32 }}>
-                        {selectedCredit && (
-                            <>
-                                <Text style={[styles.modalTitle, { textAlign: 'center' }]}>{selectedCredit.customer_name}</Text>
-                                <Text style={{ marginBottom: 40, fontSize: 16, textAlign: 'center' }}>
-                                    Restante a pagar: <Text style={{ fontWeight: 'bold', color: '#ef4444' }}>{formatCurrency(selectedCredit.total_value - selectedCredit.paid_amount)}</Text>
-                                </Text>
-
-                                <View style={{ width: '100%', marginBottom: 16 }}>
-                                    <Input label="Valor do Pagamento Agora (R$)" keyboardType="numeric" value={payAmount} onChangeText={setPayAmount} />
-                                </View>
-
-                                <View style={[styles.modalActions, { justifyContent: 'space-between', gap: 12, width: '100%', marginTop: 24, flexDirection: isMobile ? 'column' : 'row' }]}>
-                                    <Button variant="outline" onPress={() => setModalVisible(false)} title="Cancelar" style={{ flex: 1, width: isMobile ? '100%' : undefined }} />
-                                    <Button onPress={submitPayment} title="Confirmar" style={{ flex: 1, backgroundColor: '#16a34a', width: isMobile ? '100%' : undefined }} />
-                                </View>
-                            </>
-                        )}
-                    </Card>
-                </View>
-            </Modal>
+            <ResponsiveModal
+                visible={modalVisible}
+                onRequestClose={() => setModalVisible(false)}
+                title={selectedCredit ? selectedCredit.customer_name : 'Receber Pagamento'}
+                centeredContent
+                footer={
+                    <View style={{ flexDirection: isMobile ? 'column' : 'row', gap: 12, width: '100%' }}>
+                        <Button variant="outline" onPress={() => setModalVisible(false)} title="Cancelar" style={{ flex: 1, width: isMobile ? '100%' : undefined }} />
+                        <Button onPress={submitPayment} title="Confirmar" style={{ flex: 1, backgroundColor: '#16a34a', width: isMobile ? '100%' : undefined }} />
+                    </View>
+                }
+            >
+                {selectedCredit && (
+                    <>
+                        <Text style={{ marginBottom: 20, fontSize: 16, textAlign: 'center', color: '#3f3f46' }}>
+                            Restante a pagar: <Text style={{ fontWeight: 'bold', color: '#ef4444' }}>{formatCurrency(selectedCredit.total_value - selectedCredit.paid_amount)}</Text>
+                        </Text>
+                        <View style={{ width: '100%' }}>
+                            <Input label="Valor do Pagamento Agora (R$)" keyboardType="numeric" value={payAmount} onChangeText={setPayAmount} />
+                        </View>
+                    </>
+                )}
+            </ResponsiveModal>
 
             {/* Soft Alert Modal */}
-            <Modal visible={!!alertMessage} transparent={true} animationType="fade">
-                <View style={[styles.modalOverlay, { zIndex: 9999 }]}>
-                    <Card style={{ ...styles.modalCard as any, maxWidth: 400, alignItems: 'flex-start', padding: isMobile ? 20 : 32 }}>
-                        <Text style={[{ color: '#09090b', marginBottom: 16, fontSize: 18, fontWeight: 'bold' }]}>Aviso</Text>
-                        <Text style={{ fontSize: 16, color: '#3f3f46', marginBottom: 40, lineHeight: 22 }}>{alertMessage}</Text>
-                        <View style={{ flexDirection: 'row', justifyContent: 'flex-start', width: '100%' }}>
-                            <Button title="Entendi" onPress={() => setAlertMessage(null)} style={{ backgroundColor: '#3b82f6', width: isMobile ? '100%' : undefined }} />
-                        </View>
-                    </Card>
-                </View>
-            </Modal>
+            <ResponsiveModal
+                visible={!!alertMessage}
+                onRequestClose={() => setAlertMessage(null)}
+                title="Atenção"
+                titleColor="#dc2626"
+                footer={<Button title="Entendi" onPress={() => setAlertMessage(null)} style={{ backgroundColor: '#3b82f6', width: '100%' }} />}
+            >
+                <Text style={{ fontSize: 16, color: '#3f3f46', lineHeight: 22 }}>{alertMessage}</Text>
+            </ResponsiveModal>
 
             {/* Soft Confirm Modal */}
-            <Modal visible={!!confirmAction} transparent={true} animationType="fade">
-                <View style={[styles.modalOverlay, { zIndex: 9999 }]}>
-                    <Card style={{ ...styles.modalCard as any, maxWidth: 400, alignItems: 'flex-start', padding: isMobile ? 20 : 32 }}>
-                        <Text style={[{ color: '#09090b', marginBottom: 16, fontSize: 18, fontWeight: 'bold' }]}>Confirmação</Text>
-                        <Text style={{ fontSize: 16, color: '#3f3f46', marginBottom: 40, lineHeight: 22 }}>{confirmAction?.message}</Text>
-                        <View style={{ flexDirection: isMobile ? 'column' : 'row', justifyContent: 'flex-start', width: '100%', gap: 12 }}>
-                            <Button title="Cancelar" variant="outline" onPress={() => setConfirmAction(null)} style={{ width: isMobile ? '100%' : undefined }} />
-                            <Button title="Sim, confirmar" onPress={confirmAction ? confirmAction.onConfirm : () => {}} style={{ backgroundColor: '#dc2626', width: isMobile ? '100%' : undefined }} />
-                        </View>
-                    </Card>
-                </View>
-            </Modal>
+            <ResponsiveModal
+                visible={!!confirmAction}
+                onRequestClose={() => setConfirmAction(null)}
+                title="Confirmação de Cancelamento"
+                titleColor="#dc2626"
+                centeredContent
+                footer={
+                    <View style={{ flexDirection: isMobile ? 'column' : 'row', width: '100%', gap: 12 }}>
+                        <Button title="Cancelar" variant="outline" onPress={() => setConfirmAction(null)} style={{ width: isMobile ? '100%' : undefined, flex: 1 }} />
+                        <Button title="Sim, confirmar" onPress={confirmAction ? confirmAction.onConfirm : () => {}} style={{ backgroundColor: '#dc2626', width: isMobile ? '100%' : undefined, flex: 1 }} />
+                    </View>
+                }
+            >
+                <Text style={{ fontSize: 16, color: '#3f3f46', lineHeight: 22, textAlign: 'center' }}>
+                    {confirmAction?.message || 'Tem certeza que deseja cancelar? Você perderá todas as alterações realizadas.'}
+                </Text>
+            </ResponsiveModal>
         </View>
     );
 }

@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { useStore } from '../store/useStore';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
 import { MaterialIcons } from '@expo/vector-icons';
 
 export default function Dashboard() {
@@ -14,7 +13,7 @@ export default function Dashboard() {
     useEffect(() => {
         fetchDashboard();
         fetchPendingCredits();
-    }, []);
+    }, [fetchDashboard, fetchPendingCredits]);
 
     const onRefresh = () => {
         fetchDashboard();

@@ -1,5 +1,8 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from app.models.product import Product
+from app.models.sale import Sale
+from app.models.credit_sale import CreditSale
 from app.schemas.product import ProductCreate, ProductUpdate
 from fastapi import HTTPException
 
@@ -37,6 +40,29 @@ def delete_product(db: Session, product_id: int):
     db_product = get_product(db, product_id)
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
-    db.delete(db_product)
-    db.commit()
+
+    has_sales = db.query(Sale.id).filter(Sale.product_id == product_id).first() is not None
+    has_credit_sales = db.query(CreditSale.id).filter(CreditSale.product_id == product_id).first() is not None
+
+    if has_credit_sales:
+        raise HTTPException(
+            status_code=400,
+            detail="Erro ao apagar: este item possui venda no fiado vinculada."
+        )
+
+    if has_sales:
+        raise HTTPException(
+            status_code=400,
+            detail="Erro ao apagar: este item já foi vendido."
+        )
+
+    try:
+        db.delete(db_product)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Não é possível excluir este produto porque ele possui vendas/fiados vinculados. Limpe o histórico relacionado primeiro."
+        )
     return {"ok": True}

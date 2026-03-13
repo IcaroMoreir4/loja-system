@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Modal, TouchableOpacity, useWindowDimensions, FlatList, Pressable, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, FlatList, Pressable, Animated } from 'react-native';
 import { useStore, Product } from '../store/useStore';
 import { api } from '../services/api';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
+import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { ResponsiveModal } from '../components/ui/ResponsiveModal';
 
 // Custom Animated Pressable for reusable snappy animations inside Sales
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -71,13 +72,13 @@ export default function SalesScreen() {
 
     useEffect(() => {
         fetchProducts();
-    }, []);
+    }, [fetchProducts]);
 
     useEffect(() => {
         if (products.length > 0 && !selectedProduct) {
             setSelectedProduct(products[0]);
         }
-    }, [products]);
+    }, [products, selectedProduct]);
 
     const getProductPrice = () => {
         if (!selectedProduct) return 0;
@@ -296,67 +297,66 @@ export default function SalesScreen() {
             </View>
 
             {/* Product Search Modal */}
-            <Modal visible={searchModalVisible} transparent={true} animationType="fade">
-                <View style={styles.modalOverlay}>
-                    <Card style={isMobile ? ({ ...styles.modalCard, padding: 20, maxHeight: '90%' } as any) : styles.modalCard}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Buscar Produto</Text>
-                            <SnappyButton onPress={() => setSearchModalVisible(false)} style={{ padding: 8, backgroundColor: '#f4f4f5', borderRadius: 20 }}>
-                                <MaterialIcons name="close" size={24} color="#09090b" />
-                            </SnappyButton>
-                        </View>
+            <ResponsiveModal
+                visible={searchModalVisible}
+                onRequestClose={() => setSearchModalVisible(false)}
+                title="Buscar Produto"
+                footer={
+                    <Button
+                        title="Fechar"
+                        variant="outline"
+                        onPress={() => setSearchModalVisible(false)}
+                        style={{ width: '100%' }}
+                    />
+                }
+            >
+                <Input
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="Buscar por nome ou variação..."
+                    autoFocus
+                />
 
-                        <Input
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            placeholder="Buscar por nome ou variação..."
-                            autoFocus
-                        />
-
-                        <FlatList
-                            data={products.filter(p => {
-                                const q = searchQuery.toLowerCase();
-                                return p.name.toLowerCase().includes(q) || (p.variation && p.variation.toLowerCase().includes(q));
-                            })}
-                            keyExtractor={p => String(p.id)}
-                            style={{ maxHeight: 300, marginTop: 12 }}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={styles.searchItem}
-                                    onPress={() => {
-                                        setSelectedProduct(item);
-                                        setSearchModalVisible(false);
-                                        setSearchQuery('');
-                                    }}
-                                >
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
-                                        <Text style={styles.searchItemName}>{item.name}</Text>
-                                        {item.variation && <Badge variant="secondary" style={{ marginLeft: 8 }}>{item.variation}</Badge>}
-                                    </View>
-                                    <View style={{ alignItems: 'flex-end', marginLeft: 16 }}>
-                                        <Text style={styles.searchItemPrice}>{formatCurrency(item.selling_price)}</Text>
-                                        <Text style={styles.searchItemDetails}>Estoque: {item.quantity}</Text>
-                                    </View>
-                                </TouchableOpacity>
-                            )}
-                            ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#71717a', padding: 24 }}>Nenhum produto encontrado.</Text>}
-                        />
-                    </Card>
-                </View>
-            </Modal>
+                <FlatList
+                    data={products.filter(p => {
+                        const q = searchQuery.toLowerCase();
+                        return p.name.toLowerCase().includes(q) || (p.variation && p.variation.toLowerCase().includes(q));
+                    })}
+                    keyExtractor={p => String(p.id)}
+                    style={{ maxHeight: 320, marginTop: 12 }}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity
+                            style={styles.searchItem}
+                            onPress={() => {
+                                setSelectedProduct(item);
+                                setSearchModalVisible(false);
+                                setSearchQuery('');
+                            }}
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+                                <Text style={styles.searchItemName}>{item.name}</Text>
+                                {item.variation && <Badge variant="secondary" style={{ marginLeft: 8 }}>{item.variation}</Badge>}
+                            </View>
+                            <View style={{ alignItems: 'flex-end', marginLeft: 16 }}>
+                                <Text style={styles.searchItemPrice}>{formatCurrency(item.selling_price)}</Text>
+                                <Text style={styles.searchItemDetails}>Estoque: {item.quantity}</Text>
+                            </View>
+                        </TouchableOpacity>
+                    )}
+                    ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#71717a', padding: 24 }}>Nenhum produto encontrado.</Text>}
+                />
+            </ResponsiveModal>
 
             {/* Soft Alert Modal */}
-            <Modal visible={!!alertMessage} transparent={true} animationType="fade">
-                <View style={[styles.modalOverlay, { zIndex: 9999 }]}>
-                    <Card style={{ ...styles.modalCard as any, maxWidth: 400, alignItems: 'flex-start', padding: isMobile ? 20 : 32 }}>
-                        <Text style={[{ color: '#09090b', marginBottom: 16, fontSize: 18, fontWeight: 'bold' }]}>Aviso</Text>
-                        <Text style={{ fontSize: 16, color: '#3f3f46', marginBottom: 40, lineHeight: 22 }}>{alertMessage}</Text>
-                        <View style={{ flexDirection: 'row', justifyContent: 'flex-start', width: '100%' }}>
-                            <Button title="Entendi" onPress={() => setAlertMessage(null)} style={{ backgroundColor: '#3b82f6', width: isMobile ? '100%' : undefined }} />
-                        </View>
-                    </Card>
-                </View>
-            </Modal>
+            <ResponsiveModal
+                visible={!!alertMessage}
+                onRequestClose={() => setAlertMessage(null)}
+                title="Atenção"
+                titleColor="#dc2626"
+                footer={<Button title="Entendi" onPress={() => setAlertMessage(null)} style={{ backgroundColor: '#3b82f6', width: '100%' }} />}
+            >
+                <Text style={{ fontSize: 16, color: '#3f3f46', lineHeight: 22 }}>{alertMessage}</Text>
+            </ResponsiveModal>
         </ScrollView>
     );
 }

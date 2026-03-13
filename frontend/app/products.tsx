@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Modal, ScrollView, Alert, KeyboardAvoidingView, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, useWindowDimensions } from 'react-native';
 import { useStore, Product } from '../store/useStore';
 import { api } from '../services/api';
-import { MaterialIcons } from '@expo/vector-icons';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
+import { ResponsiveModal } from '../components/ui/ResponsiveModal';
 
 export default function ProductsScreen() {
     const { width } = useWindowDimensions();
@@ -30,7 +30,7 @@ export default function ProductsScreen() {
 
     useEffect(() => {
         fetchProducts();
-    }, []);
+    }, [fetchProducts]);
 
     const openModal = (prod?: Product) => {
         if (prod) {
@@ -110,8 +110,9 @@ export default function ProductsScreen() {
                 try {
                     await api.delete(`/products/${id}`);
                     fetchProducts();
-                } catch (error) {
-                    setAlertMessage('Erro ao excluir');
+                } catch (error: any) {
+                    const detail = error?.response?.data?.detail;
+                    setAlertMessage(detail || 'Erro ao apagar item.');
                 }
                 setConfirmAction(null);
             }
@@ -183,62 +184,66 @@ export default function ProductsScreen() {
                 ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#71717a', paddingTop: 24 }}>Nenhum produto encontrado na busca.</Text>}
             />
 
-            <Modal visible={modalVisible} transparent={true} animationType="fade">
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-                    <Card style={isMobile ? ({ ...styles.modalCard, padding: 20 } as any) : styles.modalCard}>
-                        <ScrollView showsVerticalScrollIndicator={false}>
-                            <Text style={styles.modalTitle}>{editingId ? 'Editar Produto' : 'Novo Produto'}</Text>
-
-                            <Input label="Nome do Produto" value={name} onChangeText={setName} />
-                            <Input label="Variação / Tamanho (Opcional)" value={variation} onChangeText={setVariation} placeholder="Ex: G, Jeans 40, Azul..." />
-                            <Input label="Quantidade em Estoque" keyboardType="numeric" value={quantity} onChangeText={setQuantity} />
-                            <Input label="Preço de Custo (R$)" keyboardType="numeric" value={costPrice} onChangeText={setCostPrice} />
-                            <Input label="Preço de Venda (R$)" keyboardType="numeric" value={sellingPrice} onChangeText={setSellingPrice} />
-
-                            <View style={[styles.modalActions, isMobile && { flexDirection: 'column', gap: 10 }]}>
-                                <Button variant="destructive" onPress={() => {
-                                    setConfirmAction({
-                                        message: "Tem certeza que deseja cancelar? Você perderá todas as alterações que tinha feito.",
-                                        onConfirm: () => {
-                                            setModalVisible(false);
-                                            setConfirmAction(null);
-                                        }
-                                    });
-                                }} title="Cancelar" style={{ flex: 1, backgroundColor: '#ef4444', width: isMobile ? '100%' : undefined }} />
-                                <View style={{ width: isMobile ? 0 : 12, height: isMobile ? 10 : 0 }} />
-                                <Button onPress={saveProduct} title="Salvar" style={{ flex: 1, backgroundColor: '#16a34a', width: isMobile ? '100%' : undefined }} />
-                            </View>
-                        </ScrollView>
-                    </Card>
-                </KeyboardAvoidingView>
-            </Modal>
+            <ResponsiveModal
+                visible={modalVisible}
+                onRequestClose={() => setModalVisible(false)}
+                title={editingId ? 'Editar Produto' : 'Novo Produto'}
+                footer={
+                    <View style={{ flexDirection: isMobile ? 'column' : 'row', gap: 12, width: '100%' }}>
+                        <Button
+                            variant="outline"
+                            onPress={() => {
+                                setConfirmAction({
+                                    message: "Tem certeza que deseja cancelar? Você perderá todas as alterações realizadas.",
+                                    onConfirm: () => {
+                                        setModalVisible(false);
+                                        setConfirmAction(null);
+                                    }
+                                });
+                            }}
+                            title="Cancelar"
+                            style={{ flex: 1, width: isMobile ? '100%' : undefined }}
+                        />
+                        <Button onPress={saveProduct} title="Salvar" style={{ flex: 1, backgroundColor: '#16a34a', width: isMobile ? '100%' : undefined }} />
+                    </View>
+                }
+            >
+                <Input label="Nome do Produto" value={name} onChangeText={setName} />
+                <Input label="Variação / Tamanho (Opcional)" value={variation} onChangeText={setVariation} placeholder="Ex: G, Jeans 40, Azul..." />
+                <Input label="Quantidade em Estoque" keyboardType="numeric" value={quantity} onChangeText={setQuantity} />
+                <Input label="Preço de Custo (R$)" keyboardType="numeric" value={costPrice} onChangeText={setCostPrice} />
+                <Input label="Preço de Venda (R$)" keyboardType="numeric" value={sellingPrice} onChangeText={setSellingPrice} />
+            </ResponsiveModal>
 
             {/* Soft Alert Modal */}
-            <Modal visible={!!alertMessage} transparent={true} animationType="fade">
-                <View style={[styles.modalOverlay, { zIndex: 9999 }]}>
-                    <Card style={{ ...styles.modalCard as any, maxWidth: 400, alignItems: 'flex-start', padding: isMobile ? 20 : 32 }}>
-                        <Text style={[styles.modalTitle, { color: '#ef4444', marginBottom: 12, fontSize: 18, textAlign: 'left' }]}>Atenção</Text>
-                        <Text style={{ fontSize: 16, color: '#3f3f46', marginBottom: 40, textAlign: 'left' }}>{alertMessage}</Text>
-                        <View style={{ flexDirection: 'row', justifyContent: 'flex-start', width: '100%' }}>
-                            <Button title="Entendi" onPress={() => setAlertMessage(null)} style={{ backgroundColor: '#3b82f6', width: isMobile ? '100%' : undefined }} />
-                        </View>
-                    </Card>
-                </View>
-            </Modal>
+            <ResponsiveModal
+                visible={!!alertMessage}
+                onRequestClose={() => setAlertMessage(null)}
+                title="Atenção"
+                titleColor="#dc2626"
+                footer={<Button title="Entendi" onPress={() => setAlertMessage(null)} style={{ backgroundColor: '#3b82f6', width: '100%' }} />}
+            >
+                <Text style={{ fontSize: 16, color: '#3f3f46', lineHeight: 22 }}>{alertMessage}</Text>
+            </ResponsiveModal>
 
             {/* Soft Confirm Modal */}
-            <Modal visible={!!confirmAction} transparent={true} animationType="fade">
-                <View style={[styles.modalOverlay, { zIndex: 9999 }]}>
-                    <Card style={{ ...styles.modalCard as any, maxWidth: 400, alignItems: 'flex-start', padding: isMobile ? 20 : 32 }}>
-                        <Text style={[styles.modalTitle, { color: '#09090b', marginBottom: 16, fontSize: 18, textAlign: 'left' }]}>Confirmação</Text>
-                        <Text style={{ fontSize: 16, color: '#3f3f46', marginBottom: 40, lineHeight: 22, textAlign: 'left' }}>{confirmAction?.message}</Text>
-                        <View style={{ flexDirection: isMobile ? 'column' : 'row', justifyContent: 'flex-start', width: '100%', gap: 12 }}>
-                            <Button title="Cancelar" variant="outline" onPress={() => setConfirmAction(null)} style={{ width: isMobile ? '100%' : undefined }} />
-                            <Button title="Sim, confirmar" onPress={confirmAction ? confirmAction.onConfirm : () => {}} style={{ backgroundColor: '#dc2626', width: isMobile ? '100%' : undefined }} />
-                        </View>
-                    </Card>
-                </View>
-            </Modal>
+            <ResponsiveModal
+                visible={!!confirmAction}
+                onRequestClose={() => setConfirmAction(null)}
+                title="Confirmação de Cancelamento"
+                titleColor="#dc2626"
+                centeredContent
+                footer={
+                    <View style={{ flexDirection: isMobile ? 'column' : 'row', width: '100%', gap: 12 }}>
+                        <Button title="Cancelar" variant="outline" onPress={() => setConfirmAction(null)} style={{ width: isMobile ? '100%' : undefined, flex: 1 }} />
+                        <Button title="Sim, confirmar" onPress={confirmAction ? confirmAction.onConfirm : () => {}} style={{ backgroundColor: '#dc2626', width: isMobile ? '100%' : undefined, flex: 1 }} />
+                    </View>
+                }
+            >
+                <Text style={{ fontSize: 16, color: '#3f3f46', lineHeight: 22, textAlign: 'center' }}>
+                    {confirmAction?.message || 'Tem certeza que deseja cancelar? Você perderá todas as alterações realizadas.'}
+                </Text>
+            </ResponsiveModal>
         </View>
     );
 }
