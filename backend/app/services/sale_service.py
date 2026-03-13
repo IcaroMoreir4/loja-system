@@ -79,3 +79,48 @@ def delete_sale(db: Session, sale_id: int):
     db.delete(sale)
     db.commit()
     return {"ok": True}
+
+def update_sale(db: Session, sale_id: int, sale_update):
+    sale = db.query(Sale).filter(Sale.id == sale_id).first()
+    if not sale:
+        raise HTTPException(status_code=404, detail="Sale not found")
+        
+    if sale_update.quantity is not None and sale_update.quantity != sale.quantity:
+        product = db.query(Product).filter(Product.id == sale.product_id).first()
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+            
+        qty_diff = sale_update.quantity - sale.quantity
+        
+        # update inventory
+        product.quantity -= qty_diff
+        
+        # update sale total
+        new_total = product.selling_price * sale_update.quantity
+        old_total = sale.total_value
+        sale.quantity = sale_update.quantity
+        sale.total_value = new_total
+        
+        # Adjust payment methods amounts proportionally or just dump diff on the first method
+        if sale.payment_methods and len(sale.payment_methods) > 0:
+            methods = list(sale.payment_methods)
+            if old_total > 0:
+                ratio = new_total / old_total
+                for m in methods:
+                    m["amount"] = round(m["amount"] * ratio, 2)
+            else:
+                methods[0]["amount"] = new_total
+            # force SQLAlchemy to detect json mutation
+            sale.payment_methods = methods
+            
+        # Also adjust Fiado if it exists
+        fiados = db.query(CreditSale).filter(CreditSale.sale_id == sale.id).all()
+        for f in fiados:
+            # We find the corresponding FIADO amount in the updated methods
+            fiado_method = next((m for m in sale.payment_methods if m.get("method") == "FIADO"), None)
+            if fiado_method:
+                f.total_value = fiado_method["amount"]
+
+    db.commit()
+    db.refresh(sale)
+    return sale

@@ -1,11 +1,14 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { useStore } from '../store/useStore';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { MaterialIcons } from '@expo/vector-icons';
 
 export default function Dashboard() {
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
+
     const { dashboard, pendingCredits, fetchDashboard, fetchPendingCredits, isLoading } = useStore();
 
     useEffect(() => {
@@ -23,7 +26,7 @@ export default function Dashboard() {
     return (
         <ScrollView
             style={styles.container}
-            contentContainerStyle={styles.contentContainer}
+            contentContainerStyle={{ padding: isMobile ? 12 : 24, paddingBottom: 64 }}
             refreshControl={<RefreshControl refreshing={isLoading} onRefresh={onRefresh} />}
         >
             <View style={styles.header}>
@@ -31,55 +34,63 @@ export default function Dashboard() {
                 <Text style={styles.subtitle}>Acompanhe o desempenho da sua loja hoje.</Text>
             </View>
 
-            <View style={styles.grid}>
+            <View style={[styles.grid, isMobile && styles.gridMobile]}>
 
                 {/* Receita Hoje */}
-                <Card style={styles.card}>
+                <Card style={isMobile ? ({ ...styles.card, ...styles.cardMobile } as any) : styles.card}>
                     <CardHeader style={styles.cardHeaderRow}>
                         <CardTitle style={styles.cardTitle}>Vendido Hoje</CardTitle>
                         <MaterialIcons name="attach-money" size={20} color="#71717a" />
                     </CardHeader>
                     <CardContent>
-                        {isLoading && !dashboard ? <ActivityIndicator color="#18181b" /> : (
-                            <Text style={styles.cardValue}>{formatCurrency(dashboard?.total_sold_today || 0)}</Text>
-                        )}
-                        <Text style={styles.cardDesc}>Total bruto registrado no dia</Text>
+                        <View style={{ flexDirection: 'column' }}>
+                            {isLoading && !dashboard ? <ActivityIndicator color="#18181b" /> : (
+                                <Text style={styles.cardValue}>{formatCurrency(dashboard?.total_sold_today || 0)}</Text>
+                            )}
+                            <Text style={styles.cardDesc}>Total bruto registrado no dia</Text>
+                        </View>
                     </CardContent>
                 </Card>
 
                 {/* Receita Mês */}
-                <Card style={styles.card}>
+                <Card style={isMobile ? ({ ...styles.card, ...styles.cardMobile } as any) : styles.card}>
                     <CardHeader style={styles.cardHeaderRow}>
                         <CardTitle style={styles.cardTitle}>Vendido no Mês</CardTitle>
                         <MaterialIcons name="date-range" size={20} color="#71717a" />
                     </CardHeader>
                     <CardContent>
-                        <Text style={styles.cardValue}>{formatCurrency(dashboard?.total_sold_month || 0)}</Text>
-                        <Text style={styles.cardDesc}>Receita acumulada neste mês</Text>
+                        <View style={{ flexDirection: 'column' }}>
+                            <Text style={styles.cardValue}>{formatCurrency(dashboard?.total_sold_month || 0)}</Text>
+                            <Text style={styles.cardDesc}>Receita acumulada neste mês</Text>
+                        </View>
                     </CardContent>
                 </Card>
 
                 {/* Lucro Estimado */}
-                <Card style={styles.card}>
+                <Card style={isMobile ? ({ ...styles.card, ...styles.cardMobile } as any) : styles.card}>
                     <CardHeader style={styles.cardHeaderRow}>
                         <CardTitle style={styles.cardTitle}>Lucro Estimado</CardTitle>
                         <MaterialIcons name="trending-up" size={20} color="#71717a" />
                     </CardHeader>
                     <CardContent>
-                        <Text style={[styles.cardValue, { color: '#16a34a' }]}>{formatCurrency(dashboard?.profit_month || 0)}</Text>
-                        <Text style={styles.cardDesc}>Baseado na Venda - Custo</Text>
+                        <View style={{ flexDirection: 'column' }}>
+                            <Text style={[styles.cardValue, { color: '#8b5cf6' }]}>{formatCurrency(dashboard?.profit_month || 0)}</Text>
+                            <Text style={styles.cardDesc}>Baseado na Venda - Custo</Text>
+                        </View>
                     </CardContent>
                 </Card>
 
                 {/* Produtos Vendidos */}
-                <Card style={styles.card}>
+                <Card style={isMobile ? ({ ...styles.card, ...styles.cardMobile } as any) : styles.card}>
                     <CardHeader style={styles.cardHeaderRow}>
                         <CardTitle style={styles.cardTitle}>Peças Vendidas</CardTitle>
                         <MaterialIcons name="shopping-bag" size={20} color="#71717a" />
                     </CardHeader>
                     <CardContent>
-                        <Text style={styles.cardValue}>{dashboard?.total_items_sold || 0}</Text>
-                        <Text style={styles.cardDesc}>Destaque: {dashboard?.top_product || 'Nenhum'}</Text>
+                        <View style={{ flexDirection: 'column' }}>
+                            <Text style={styles.cardValue}>{dashboard?.total_items_sold || 0}</Text>
+                            <Text style={styles.cardDesc}>Destaque: {dashboard?.top_product || 'Nenhum'}</Text>
+                        </View>
                     </CardContent>
                 </Card>
 
@@ -104,14 +115,15 @@ export default function Dashboard() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f4f4f5' },
-    contentContainer: { padding: 24, paddingBottom: 64 },
 
     header: { marginBottom: 24 },
     title: { fontSize: 32, fontWeight: 'bold', color: '#09090b', letterSpacing: -0.5 },
     subtitle: { fontSize: 16, color: '#71717a', marginTop: 4 },
 
     grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 24 },
-    card: { flexGrow: 1, minWidth: 250, maxWidth: '100%', flexBasis: '45%' },
+    gridMobile: { flexDirection: 'column', flexWrap: 'nowrap', gap: 12 },
+    card: { flexGrow: 1, minWidth: 150, maxWidth: '100%', flexBasis: '45%' },
+    cardMobile: { width: '100%', minWidth: '100%', flexBasis: '100%' },
 
     cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8 },
     cardTitle: { fontSize: 14, fontWeight: '500', color: '#71717a' },

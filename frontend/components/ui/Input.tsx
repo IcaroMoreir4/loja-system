@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { TextInput, StyleSheet, TextInputProps, View, Text } from 'react-native';
+import { TextInput, StyleSheet, TextInputProps, View, Text, Platform } from 'react-native';
 
 interface InputProps extends TextInputProps {
     label?: string;
     error?: string;
+    containerStyle?: any;
+    type?: string; // For web native inputs like "date"
 }
 
-export function Input({ label, error, style, ...props }: InputProps) {
+export function Input({ label, error, style, containerStyle, type, ...props }: InputProps) {
     const [isFocused, setIsFocused] = useState(false);
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, containerStyle]}>
             {label && <Text style={styles.label}>{label}</Text>}
             <TextInput
                 style={[
@@ -28,6 +30,7 @@ export function Input({ label, error, style, ...props }: InputProps) {
                     props.onBlur && props.onBlur(e);
                 }}
                 placeholderTextColor="#a1a1aa"
+                {...(Platform.OS === 'web' && type ? { type } : {})}
                 {...props}
             />
             {error && <Text style={styles.errorText}>{error}</Text>}

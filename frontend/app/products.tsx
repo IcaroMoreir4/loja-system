@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Modal, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Modal, ScrollView, Alert, KeyboardAvoidingView, Platform, useWindowDimensions } from 'react-native';
 import { useStore, Product } from '../store/useStore';
 import { api } from '../services/api';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -9,6 +9,9 @@ import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 
 export default function ProductsScreen() {
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
+
     const { products, fetchProducts, isLoading } = useStore();
     const [modalVisible, setModalVisible] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -20,6 +23,10 @@ export default function ProductsScreen() {
     const [sellingPrice, setSellingPrice] = useState('');
 
     const [searchQuery, setSearchQuery] = useState('');
+    
+    // Custom Soft Alert State
+    const [alertMessage, setAlertMessage] = useState<string | null>(null);
+    const [confirmAction, setConfirmAction] = useState<{ message: string, onConfirm: () => void } | null>(null);
 
     useEffect(() => {
         fetchProducts();
@@ -47,15 +54,34 @@ export default function ProductsScreen() {
     const saveProduct = async () => {
         try {
             if (!name || !quantity || !costPrice || !sellingPrice) {
-                alert('Preencha todos os campos!');
+                setAlertMessage('Preencha todos os campos!');
                 return;
             }
+            const parseMoney = (value: string) => {
+                let val = value.toString().replace(/[^\d.,]/g, '');
+                if (val.includes(',') && val.includes('.')) {
+                    val = val.replace(/\./g, '').replace(',', '.');
+                } else if (val.includes(',')) {
+                    val = val.replace(',', '.');
+                }
+                return parseFloat(val);
+            };
+
+            const parsedQty = parseInt(quantity.toString().replace(/\D/g, ''), 10);
+            const parsedCost = parseMoney(costPrice);
+            const parsedSell = parseMoney(sellingPrice);
+
+            if (isNaN(parsedQty) || isNaN(parsedCost) || isNaN(parsedSell)) {
+                setAlertMessage('Quantidade ou Preço possuem formato inválido.');
+                return;
+            }
+
             const payload = {
                 name,
                 variation: variation || null,
-                quantity: parseInt(quantity),
-                cost_price: parseFloat(costPrice),
-                selling_price: parseFloat(sellingPrice),
+                quantity: parsedQty,
+                cost_price: parsedCost,
+                selling_price: parsedSell,
             };
 
             if (editingId) {
@@ -66,20 +92,30 @@ export default function ProductsScreen() {
 
             setModalVisible(false);
             fetchProducts();
-        } catch (error) {
-            alert('Erro ao salvar produto');
+        } catch (error: any) {
+            console.error(error.response?.data || error);
+            const detail = error.response?.data?.detail?.[0]?.msg || error.response?.data?.detail;
+            if (!error.response) {
+                setAlertMessage('Não foi possível conectar à API. Verifique se o backend está rodando na porta 8000.');
+                return;
+            }
+            setAlertMessage(detail || 'Erro ao salvar produto');
         }
     };
 
     const deleteProduct = async (id: number) => {
-        if (confirm('Tem certeza que deseja apagar este produto? Ao invés de apagar, pode ser util apenas zerar o estoque dele.')) {
-            try {
-                await api.delete(`/products/${id}`);
-                fetchProducts();
-            } catch (error) {
-                alert('Erro ao excluir');
+        setConfirmAction({
+            message: 'Tem certeza que deseja apagar este produto?\n\nAo invés de apagar, pode ser útil apenas zerar o estoque dele.',
+            onConfirm: async () => {
+                try {
+                    await api.delete(`/products/${id}`);
+                    fetchProducts();
+                } catch (error) {
+                    setAlertMessage('Erro ao excluir');
+                }
+                setConfirmAction(null);
             }
-        }
+        });
     };
 
     const renderItem = ({ item }: { item: Product }) => {
@@ -88,11 +124,13 @@ export default function ProductsScreen() {
 
         return (
             <Card style={styles.productCard}>
-                <CardContent style={styles.cardRow}>
-                    <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                            <Text style={styles.productName}>{item.name}</Text>
-                            {item.variation ? <Badge variant="secondary" style={{ marginLeft: 6 }}>{item.variation}</Badge> : null}
+                <CardContent style={isMobile ? { ...styles.cardRow, flexDirection: 'column', alignItems: 'stretch' } as any : styles.cardRow}>
+                    <View style={{ flex: 1, paddingTop: 12, paddingBottom: isMobile ? 12 : 0 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+                                <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
+                                {item.variation ? <Badge variant="secondary" style={{ marginLeft: 6 }}>{item.variation}</Badge> : null}
+                            </View>
                             {isLowStock && <Badge variant="destructive" style={{ marginLeft: 8 }}>Estoque Baixo</Badge>}
                         </View>
                         <Text style={styles.productDetails}>
@@ -105,9 +143,9 @@ export default function ProductsScreen() {
                         </View>
                     </View>
 
-                    <View style={styles.actionColumn}>
-                        <Button variant="ghost" onPress={() => openModal(item)} title="Editar" />
-                        <Button variant="destructive" onPress={() => deleteProduct(item.id)} title="Excluir" />
+                    <View style={isMobile ? { flexDirection: 'row', gap: 8, paddingTop: 16, borderTopWidth: 1, borderColor: '#f4f4f5' } as any : { flexDirection: 'row', gap: 8, width: '100%', justifyContent: 'flex-start', alignItems: 'center', marginTop: 16 }}>
+                        <Button style={{ width: 100, backgroundColor: '#3b82f6', paddingVertical: 8 }} onPress={() => openModal(item)} title="Editar" textStyle={{ fontSize: 13 }} />
+                        <Button style={{ width: 100, backgroundColor: '#dc2626', paddingVertical: 8 }} onPress={() => deleteProduct(item.id)} title="Excluir" textStyle={{ fontSize: 13 }} />
                     </View>
                 </CardContent>
             </Card>
@@ -116,12 +154,12 @@ export default function ProductsScreen() {
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <View>
+            <View style={isMobile ? { ...styles.header, flexDirection: 'column', alignItems: 'flex-start' } as any : styles.header}>
+                <View style={{ marginBottom: isMobile ? 16 : 0 }}>
                     <Text style={styles.title}>Estoque ({products.length})</Text>
                     <Text style={styles.subtitle}>Gerencie os produtos da sua loja.</Text>
                 </View>
-                <Button onPress={() => openModal()} title="+ Novo Produto" />
+                <Button onPress={() => openModal()} title="+ Novo Produto" style={[isMobile ? { width: '100%' } : {}, { backgroundColor: '#3b82f6' }]} />
             </View>
 
             <View style={{ paddingHorizontal: 24, paddingBottom: 16 }}>
@@ -147,26 +185,59 @@ export default function ProductsScreen() {
 
             <Modal visible={modalVisible} transparent={true} animationType="fade">
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-                    <Card style={styles.modalCard}>
+                    <Card style={isMobile ? ({ ...styles.modalCard, padding: 20 } as any) : styles.modalCard}>
                         <ScrollView showsVerticalScrollIndicator={false}>
                             <Text style={styles.modalTitle}>{editingId ? 'Editar Produto' : 'Novo Produto'}</Text>
 
                             <Input label="Nome do Produto" value={name} onChangeText={setName} />
                             <Input label="Variação / Tamanho (Opcional)" value={variation} onChangeText={setVariation} placeholder="Ex: G, Jeans 40, Azul..." />
                             <Input label="Quantidade em Estoque" keyboardType="numeric" value={quantity} onChangeText={setQuantity} />
-                            <View style={{ flexDirection: 'row', gap: 12 }}>
-                                <Input style={{ flex: 1 }} label="Preço de Custo (R$)" keyboardType="numeric" value={costPrice} onChangeText={setCostPrice} />
-                                <Input style={{ flex: 1 }} label="Preço de Venda (R$)" keyboardType="numeric" value={sellingPrice} onChangeText={setSellingPrice} />
-                            </View>
+                            <Input label="Preço de Custo (R$)" keyboardType="numeric" value={costPrice} onChangeText={setCostPrice} />
+                            <Input label="Preço de Venda (R$)" keyboardType="numeric" value={sellingPrice} onChangeText={setSellingPrice} />
 
-                            <View style={styles.modalActions}>
-                                <Button variant="outline" onPress={() => setModalVisible(false)} title="Cancelar" style={{ flex: 1 }} />
-                                <View style={{ width: 12 }} />
-                                <Button onPress={saveProduct} title="Salvar" style={{ flex: 1 }} />
+                            <View style={[styles.modalActions, isMobile && { flexDirection: 'column', gap: 10 }]}>
+                                <Button variant="destructive" onPress={() => {
+                                    setConfirmAction({
+                                        message: "Tem certeza que deseja cancelar? Você perderá todas as alterações que tinha feito.",
+                                        onConfirm: () => {
+                                            setModalVisible(false);
+                                            setConfirmAction(null);
+                                        }
+                                    });
+                                }} title="Cancelar" style={{ flex: 1, backgroundColor: '#ef4444', width: isMobile ? '100%' : undefined }} />
+                                <View style={{ width: isMobile ? 0 : 12, height: isMobile ? 10 : 0 }} />
+                                <Button onPress={saveProduct} title="Salvar" style={{ flex: 1, backgroundColor: '#16a34a', width: isMobile ? '100%' : undefined }} />
                             </View>
                         </ScrollView>
                     </Card>
                 </KeyboardAvoidingView>
+            </Modal>
+
+            {/* Soft Alert Modal */}
+            <Modal visible={!!alertMessage} transparent={true} animationType="fade">
+                <View style={[styles.modalOverlay, { zIndex: 9999 }]}>
+                    <Card style={{ ...styles.modalCard as any, maxWidth: 400, alignItems: 'flex-start', padding: isMobile ? 20 : 32 }}>
+                        <Text style={[styles.modalTitle, { color: '#ef4444', marginBottom: 12, fontSize: 18, textAlign: 'left' }]}>Atenção</Text>
+                        <Text style={{ fontSize: 16, color: '#3f3f46', marginBottom: 40, textAlign: 'left' }}>{alertMessage}</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'flex-start', width: '100%' }}>
+                            <Button title="Entendi" onPress={() => setAlertMessage(null)} style={{ backgroundColor: '#3b82f6', width: isMobile ? '100%' : undefined }} />
+                        </View>
+                    </Card>
+                </View>
+            </Modal>
+
+            {/* Soft Confirm Modal */}
+            <Modal visible={!!confirmAction} transparent={true} animationType="fade">
+                <View style={[styles.modalOverlay, { zIndex: 9999 }]}>
+                    <Card style={{ ...styles.modalCard as any, maxWidth: 400, alignItems: 'flex-start', padding: isMobile ? 20 : 32 }}>
+                        <Text style={[styles.modalTitle, { color: '#09090b', marginBottom: 16, fontSize: 18, textAlign: 'left' }]}>Confirmação</Text>
+                        <Text style={{ fontSize: 16, color: '#3f3f46', marginBottom: 40, lineHeight: 22, textAlign: 'left' }}>{confirmAction?.message}</Text>
+                        <View style={{ flexDirection: isMobile ? 'column' : 'row', justifyContent: 'flex-start', width: '100%', gap: 12 }}>
+                            <Button title="Cancelar" variant="outline" onPress={() => setConfirmAction(null)} style={{ width: isMobile ? '100%' : undefined }} />
+                            <Button title="Sim, confirmar" onPress={confirmAction ? confirmAction.onConfirm : () => {}} style={{ backgroundColor: '#dc2626', width: isMobile ? '100%' : undefined }} />
+                        </View>
+                    </Card>
+                </View>
             </Modal>
         </View>
     );
@@ -188,7 +259,7 @@ const styles = StyleSheet.create({
     actionColumn: { flexDirection: 'column', gap: 8, paddingLeft: 16, borderLeftWidth: 1, borderColor: '#f4f4f5' },
 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
-    modalCard: { width: '100%', maxWidth: 500, maxHeight: '90%', padding: 24, paddingBottom: 16 },
-    modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#09090b', marginBottom: 24 },
+    modalCard: { width: '100%', maxWidth: 500, maxHeight: '90%', padding: 32 },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#09090b', marginBottom: 24, textAlign: 'center' },
     modalActions: { flexDirection: 'row', marginTop: 16 }
 });

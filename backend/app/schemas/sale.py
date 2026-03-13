@@ -11,6 +11,9 @@ class SaleBase(BaseModel):
 class SaleCreate(SaleBase):
     pass
 
+class SaleUpdate(BaseModel):
+    quantity: Optional[int] = None
+
 class SaleResponse(SaleBase):
     id: int
     total_value: float

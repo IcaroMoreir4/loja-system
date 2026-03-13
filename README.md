@@ -31,6 +31,26 @@ npm run web
 ```
 Acesse `http://localhost:8081` no seu navegador.
 
+### Atalho: subir tudo com 1 comando
+Na raiz do projeto, use conforme seu terminal:
+
+- **PowerShell**
+```powershell
+.\start-dev.cmd
+```
+
+- **Git Bash**
+```bash
+./start-dev.sh
+```
+
+Alternativa no Git Bash (sem `.sh`):
+```bash
+cmd.exe /c start-dev.cmd
+```
+
+Isso abre duas janelas: backend (`:8000`) e frontend web (Expo).
+
 ## Testes Automatizados
 
 ### Backend (Pytest)
@@ -52,3 +72,12 @@ Se possuir o Docker Compose instalado:
 docker compose up -d --build
 ```
 Isso levantará o backend na porta `8000` e o frontend web na porta `8081`.
+
+## Créditos
+- **Desenvolvedor / Autor**: Icaro Moreira
+- **GitHub**: `IcaroMoreir4`
+- **Projeto**: Loula Control (`loja-system`)
+
+## Copyright
+Copyright (c) 2026 Icaro Moreira (`IcaroMoreir4`).  
+Todos os direitos reservados.

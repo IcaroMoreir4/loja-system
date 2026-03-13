@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, FlatList, Modal, TouchableOpacity, useWindowDimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Modal, TouchableOpacity, useWindowDimensions, FlatList, Pressable, Animated } from 'react-native';
 import { useStore, Product } from '../store/useStore';
 import { api } from '../services/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
@@ -7,13 +7,45 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 import { MaterialIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+
+// Custom Animated Pressable for reusable snappy animations inside Sales
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+const SnappyButton = ({ onPress, style, children, activeOpacity = 1 }: any) => {
+    const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+    const [isPressed, setIsPressed] = useState(false);
+
+    const handlePressIn = () => {
+        setIsPressed(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Animated.spring(scaleAnim, { toValue: 0.94, speed: 30, bounciness: 10, useNativeDriver: true }).start();
+    };
+
+    const handlePressOut = () => {
+        setIsPressed(false);
+        Animated.spring(scaleAnim, { toValue: 1, speed: 30, bounciness: 10, useNativeDriver: true }).start();
+    };
+
+    return (
+        <AnimatedPressable
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            onPress={onPress}
+            style={[style, { transform: [{ scale: scaleAnim }], opacity: isPressed ? activeOpacity : 1 }]}
+        >
+            {children}
+        </AnimatedPressable>
+    );
+};
 
 export default function SalesScreen() {
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
 
     const { products, fetchProducts, fetchDashboard } = useStore();
-    const [sales, setSales] = useState<any[]>([]);
 
     // Form State
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -22,6 +54,13 @@ export default function SalesScreen() {
     // Search Modal State
     const [searchModalVisible, setSearchModalVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    
+    // Soft Alert State
+    const [alertMessage, setAlertMessage] = useState<string | null>(null);
+
+    // Payment Mode State
+    const [paymentMode, setPaymentMode] = useState<'SINGLE' | 'SPLIT'>('SINGLE');
+    const [singleMethod, setSingleMethod] = useState<'PIX' | 'CASH' | 'CARD' | 'FIADO'>('PIX');
 
     // Split Payments State
     const [pixAmount, setPixAmount] = useState('');
@@ -32,7 +71,6 @@ export default function SalesScreen() {
 
     useEffect(() => {
         fetchProducts();
-        fetchSales();
     }, []);
 
     useEffect(() => {
@@ -40,13 +78,6 @@ export default function SalesScreen() {
             setSelectedProduct(products[0]);
         }
     }, [products]);
-
-    const fetchSales = async () => {
-        try {
-            const { data } = await api.get('/sales/');
-            setSales(data);
-        } catch (error) { }
-    };
 
     const getProductPrice = () => {
         if (!selectedProduct) return 0;
@@ -59,6 +90,7 @@ export default function SalesScreen() {
     };
 
     const calcTotalInputted = () => {
+        if (paymentMode === 'SINGLE') return calcTotalRequired();
         return (parseFloat(pixAmount) || 0) +
             (parseFloat(cashAmount) || 0) +
             (parseFloat(cardAmount) || 0) +
@@ -67,7 +99,10 @@ export default function SalesScreen() {
 
     const autofillRemaining = (setter: React.Dispatch<React.SetStateAction<string>>) => {
         const required = calcTotalRequired();
-        const currentInputted = calcTotalInputted();
+        const currentInputted = (parseFloat(pixAmount) || 0) +
+            (parseFloat(cashAmount) || 0) +
+            (parseFloat(cardAmount) || 0) +
+            (parseFloat(fiadoAmount) || 0);
         const diff = required - currentInputted;
         if (diff > 0) {
             setter(prev => (parseFloat(prev || '0') + diff).toFixed(2));
@@ -79,35 +114,41 @@ export default function SalesScreen() {
     const registerSale = async () => {
         const qty = parseInt(quantity);
         if (!selectedProduct || !qty || qty <= 0) {
-            alert('Selecione um produto e uma quantidade válida.');
+            setAlertMessage('Selecione um produto e uma quantidade válida.');
             return;
         }
-
-        const prod = selectedProduct;
-        // Permite estoque negativo a pedido do usuario
-        // if (!prod || prod.quantity < qty) {
-        //     alert(`Estoque insuficiente. Disponível: ${prod ? prod.quantity : 0}`);
-        //     return;
-        // }
 
         const required = calcTotalRequired();
         const inputted = calcTotalInputted();
 
-        if (Math.abs(required - inputted) > 0.01) {
-            alert(`O valor dos pagamentos (${formatCurrency(inputted)}) não bate com o total da compra (${formatCurrency(required)}).`);
+        if (paymentMode === 'SPLIT' && Math.abs(required - inputted) > 0.01) {
+            setAlertMessage(`O valor dos pagamentos (${formatCurrency(inputted)}) não bate com o total da compra (${formatCurrency(required)}).`);
             return;
         }
 
-        if (parseFloat(fiadoAmount) > 0 && !fiadoCustomer.trim()) {
-            alert('Para vendas no fiado, é obrigatório informar o nome do cliente.');
+        if (paymentMode === 'SINGLE' && singleMethod === 'FIADO' && !fiadoCustomer.trim()) {
+            setAlertMessage('Para vendas no fiado, é obrigatório informar o nome do cliente.');
+            return;
+        }
+
+        if (paymentMode === 'SPLIT' && parseFloat(fiadoAmount) > 0 && !fiadoCustomer.trim()) {
+            setAlertMessage('Para vendas no fiado, é obrigatório informar o nome do cliente.');
             return;
         }
 
         const paymentMethods = [];
-        if (parseFloat(pixAmount) > 0) paymentMethods.push({ method: 'PIX', amount: parseFloat(pixAmount) });
-        if (parseFloat(cashAmount) > 0) paymentMethods.push({ method: 'CASH', amount: parseFloat(cashAmount) });
-        if (parseFloat(cardAmount) > 0) paymentMethods.push({ method: 'CARD', amount: parseFloat(cardAmount) });
-        if (parseFloat(fiadoAmount) > 0) paymentMethods.push({ method: 'FIADO', amount: parseFloat(fiadoAmount), customer_name: fiadoCustomer });
+        if (paymentMode === 'SINGLE') {
+            paymentMethods.push({
+                method: singleMethod,
+                amount: required,
+                ...(singleMethod === 'FIADO' ? { customer_name: fiadoCustomer } : {})
+            });
+        } else {
+            if (parseFloat(pixAmount) > 0) paymentMethods.push({ method: 'PIX', amount: parseFloat(pixAmount) });
+            if (parseFloat(cashAmount) > 0) paymentMethods.push({ method: 'CASH', amount: parseFloat(cashAmount) });
+            if (parseFloat(cardAmount) > 0) paymentMethods.push({ method: 'CARD', amount: parseFloat(cardAmount) });
+            if (parseFloat(fiadoAmount) > 0) paymentMethods.push({ method: 'FIADO', amount: parseFloat(fiadoAmount), customer_name: fiadoCustomer });
+        }
 
         try {
             await api.post('/sales/', {
@@ -115,149 +156,154 @@ export default function SalesScreen() {
                 quantity: qty,
                 payment_methods: paymentMethods
             });
-            alert('Venda Múltipla Registrada!');
+            setAlertMessage('Venda Registrada com sucesso!');
             setQuantity('1');
-            setSelectedProduct(null); // Reseta para forçar a UI a mostrar o estoque atualizado na próxima vez
+            setSelectedProduct(null);
             setPixAmount(''); setCashAmount(''); setCardAmount(''); setFiadoAmount(''); setFiadoCustomer('');
             fetchProducts();
-            fetchSales();
             fetchDashboard();
         } catch (error: any) {
-            alert(error.response?.data?.detail || 'Erro ao registrar venda');
+            setAlertMessage(error.response?.data?.detail || 'Erro ao registrar venda');
         }
-    };
-
-    const undoSale = async (id: number) => {
-        if (confirm('Atenção: Desfazer a venda retornará os itens ao estoque e apagará os registros financeiros. Confirmar?')) {
-            try {
-                await api.delete(`/sales/${id}`);
-                fetchSales();
-                fetchProducts();
-                fetchDashboard();
-            } catch (e) {
-                alert('Erro ao desfazer venda');
-            }
-        }
-    };
-
-    const renderSaleItem = ({ item }: { item: any }) => {
-        const prod = products.find(p => p.id === item.product_id);
-        const prodName = prod ? `${prod.name}${prod.variation ? ` (${prod.variation})` : ''}` : `Prod#${item.product_id}`;
-
-        return (
-            <View style={styles.historyCard}>
-                <View style={{ flex: 1 }}>
-                    <Text style={styles.historyTitle}>{prodName} (x{item.quantity})</Text>
-                    <Text style={styles.historyTotal}>{formatCurrency(item.total_value)}</Text>
-                    <Text style={styles.historyDate}>{new Date(item.sale_date).toLocaleString()}</Text>
-                    <View style={styles.badgesRow}>
-                        {item.payment_methods.map((p: any, idx: number) => (
-                            <Badge key={idx} variant={p.method === 'FIADO' ? 'destructive' : 'secondary'} style={{ marginRight: 6, marginTop: 6 }}>
-                                {p.method} ({formatCurrency(p.amount)})
-                            </Badge>
-                        ))}
-                    </View>
-                </View>
-                <Button variant="ghost" onPress={() => undoSale(item.id)} title="Desfazer" textStyle={{ color: '#ef4444' }} />
-            </View>
-        );
     };
 
     return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <View>
+        <ScrollView style={styles.container} contentContainerStyle={{ padding: isMobile ? 12 : 24, paddingBottom: 64 }}>
+            <View style={[styles.header, isMobile && { flexDirection: 'column', alignItems: 'stretch', gap: 12 }]}>
+                <View style={{ flex: 1 }}>
                     <Text style={styles.title}>Nova Venda</Text>
-                    <Text style={styles.subtitle}>Registre vendas com múltiplos pagamentos.</Text>
+                    <Text style={styles.subtitle}>Registre uma nova venda no sistema.</Text>
                 </View>
+                <Button style={{ backgroundColor: '#3b82f6', width: isMobile ? '100%' : undefined }} onPress={() => router.push('/sales-history')} title="Ver Histórico" />
             </View>
 
-            <View style={styles.layoutColumns}>
-                {/* Left Column: Form */}
-                <ScrollView style={styles.leftColumn} contentContainerStyle={{ padding: 16 }}>
-                    <Card style={{ padding: 16 }}>
-                        <Text style={styles.sectionTitle}>Produto</Text>
+            <View style={styles.formContainer}>
+                <Card style={{ padding: isMobile ? 16 : 24 }}>
+                    <Text style={styles.sectionTitle}>1. Produto e Quantidade</Text>
 
-                        <View style={styles.pickerWrapper}>
-                            <TouchableOpacity style={styles.productSelectorBtn} onPress={() => setSearchModalVisible(true)}>
-                                <Text style={styles.productSelectorText}>
-                                    {selectedProduct ? `${selectedProduct.name}${selectedProduct.variation ? ` - ${selectedProduct.variation}` : ''} (${formatCurrency(selectedProduct.selling_price)})` : 'Selecionar Produto...'}
-                                </Text>
+                    <View style={styles.pickerWrapper}>
+                        <SnappyButton style={styles.productSelectorBtn} onPress={() => setSearchModalVisible(true)}>
+                            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 18, paddingHorizontal: 16 }}>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.productSelectorText} numberOfLines={1}>
+                                        {selectedProduct ? `${selectedProduct.name}${selectedProduct.variation ? ` - ${selectedProduct.variation}` : ''}` : 'Selecionar Produto...'}
+                                    </Text>
+                                </View>
+                                {selectedProduct && (
+                                    <Text style={{ fontWeight: '600', color: '#09090b', marginRight: 16, fontSize: 16 }}>{formatCurrency(selectedProduct.selling_price)}</Text>
+                                )}
                                 <MaterialIcons name="keyboard-arrow-down" size={24} color="#71717a" />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.row}>
-                            <View style={{ flex: 1, marginRight: 12 }}>
-                                <Input label="Quantidade" keyboardType="numeric" value={quantity} onChangeText={setQuantity} />
                             </View>
-                            <View style={{ flex: 1, backgroundColor: '#f4f4f5', borderRadius: 8, justifyContent: 'center', alignItems: 'center', height: 48, marginTop: 22 }}>
-                                <Text style={{ fontSize: 18, fontWeight: 'bold' }}>{formatCurrency(calcTotalRequired())}</Text>
+                        </SnappyButton>
+                    </View>
+
+                    <View style={{ marginBottom: 16 }}>
+                        <Input label="Quantidade" keyboardType="numeric" value={quantity} onChangeText={setQuantity} />
+                    </View>
+                    <View style={{ backgroundColor: '#f4f4f5', borderRadius: 8, padding: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
+                        <Text style={{ fontSize: 14, color: '#71717a', marginBottom: 4 }}>Total do Item</Text>
+                        <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#16a34a' }}>{formatCurrency(calcTotalRequired())}</Text>
+                    </View>
+
+                    <Text style={[styles.sectionTitle, { marginTop: 32 }]}>2. Forma de Pagamento</Text>
+
+                    <View style={[styles.toggleRow, isMobile && { flexDirection: 'column' }]}>
+                        <SnappyButton
+                            style={[styles.toggleBtn, paymentMode === 'SINGLE' ? styles.toggleBtnActive : styles.toggleBtnInactive]}
+                            onPress={() => setPaymentMode('SINGLE')}
+                        >
+                            <Text style={[paymentMode === 'SINGLE' ? styles.toggleTextActive : styles.toggleTextInactive, isMobile && { fontSize: 14 }]}>Pagamento Único</Text>
+                        </SnappyButton>
+                        <SnappyButton
+                            style={[styles.toggleBtn, paymentMode === 'SPLIT' ? styles.toggleBtnActive : styles.toggleBtnInactive]}
+                            onPress={() => setPaymentMode('SPLIT')}
+                        >
+                            <Text style={[paymentMode === 'SPLIT' ? styles.toggleTextActive : styles.toggleTextInactive, isMobile && { fontSize: 14 }]}>Dividir Valor</Text>
+                        </SnappyButton>
+                    </View>
+
+                    {paymentMode === 'SINGLE' ? (
+                        <View style={{ marginTop: 16 }}>
+                            <View style={[styles.methodsGrid, isMobile && { gap: 8, flexWrap: 'wrap' }]}>
+                                {['PIX', 'DINHEIRO', 'CARTÃO', 'FIADO'].map((m) => {
+                                    const mapVal = m === 'DINHEIRO' ? 'CASH' : m === 'CARTÃO' ? 'CARD' : m;
+                                    return (
+                                        <View key={m} style={{ flex: 1, minWidth: isMobile ? '48%' : '23%' }}>
+                                            <SnappyButton
+                                                style={[styles.methodBox, singleMethod === mapVal ? styles.methodBoxActive : styles.methodBoxInactive]}
+                                                onPress={() => setSingleMethod(mapVal as any)}
+                                            >
+                                                <Text style={[singleMethod === mapVal ? styles.methodBoxTextActive : styles.methodBoxTextInactive, isMobile && { fontSize: 14 }]}>
+                                                    {m}
+                                                </Text>
+                                            </SnappyButton>
+                                        </View>
+                                    );
+                                })}
                             </View>
+
+                            {singleMethod === 'FIADO' && (
+                                <View style={{ marginTop: 16 }}>
+                                    <Input label="Nome do Cliente (Obrigatório para Fiado)" value={fiadoCustomer} onChangeText={setFiadoCustomer} />
+                                </View>
+                            )}
                         </View>
-
-                        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Pagamento (Dividir Valor)</Text>
-
-                        <View style={styles.payRow}>
-                            <Input style={{ flex: 1 }} label="PIX" keyboardType="numeric" value={pixAmount} onChangeText={setPixAmount} placeholder="0.00" />
-                            <Button variant="ghost" title="Completar" onPress={() => autofillRemaining(setPixAmount)} style={styles.autofillBtn} />
-                        </View>
-
-                        <View style={styles.payRow}>
-                            <Input style={{ flex: 1 }} label="Dinheiro" keyboardType="numeric" value={cashAmount} onChangeText={setCashAmount} placeholder="0.00" />
-                            <Button variant="ghost" title="Completar" onPress={() => autofillRemaining(setCashAmount)} style={styles.autofillBtn} />
-                        </View>
-
-                        <View style={styles.payRow}>
-                            <Input style={{ flex: 1 }} label="Cartão" keyboardType="numeric" value={cardAmount} onChangeText={setCardAmount} placeholder="0.00" />
-                            <Button variant="ghost" title="Completar" onPress={() => autofillRemaining(setCardAmount)} style={styles.autofillBtn} />
-                        </View>
-
-                        <View style={styles.payRow}>
-                            <Input style={{ flex: 1 }} label="Fiado (A Prazo)" keyboardType="numeric" value={fiadoAmount} onChangeText={setFiadoAmount} placeholder="0.00" />
-                            <Button variant="ghost" title="Completar" onPress={() => autofillRemaining(setFiadoAmount)} style={styles.autofillBtn} />
-                        </View>
-
-                        {parseFloat(fiadoAmount) > 0 && (
-                            <View style={{ marginTop: 8 }}>
-                                <Input label="Nome do Cliente (Obrigatório para Fiado)" value={fiadoCustomer} onChangeText={setFiadoCustomer} />
+                    ) : (
+                        <View style={{ marginTop: 16 }}>
+                            <View style={styles.payRow}>
+                                <View style={{ flex: 1, marginRight: isMobile ? 8 : 12 }}>
+                                    <Input label="PIX" keyboardType="numeric" value={pixAmount} onChangeText={setPixAmount} placeholder="0.00" style={styles.splitInput} containerStyle={{ marginBottom: 0 }} />
+                                </View>
+                                <Button style={[styles.completeBtn, { backgroundColor: '#3b82f6' }]} onPress={() => autofillRemaining(setPixAmount)} title="Completar" />
                             </View>
-                        )}
+                            <View style={styles.payRow}>
+                                <View style={{ flex: 1, marginRight: isMobile ? 8 : 12 }}>
+                                    <Input label="Dinheiro" keyboardType="numeric" value={cashAmount} onChangeText={setCashAmount} placeholder="0.00" style={styles.splitInput} containerStyle={{ marginBottom: 0 }} />
+                                </View>
+                                <Button style={[styles.completeBtn, { backgroundColor: '#3b82f6' }]} onPress={() => autofillRemaining(setCashAmount)} title="Completar" />
+                            </View>
+                            <View style={styles.payRow}>
+                                <View style={{ flex: 1, marginRight: isMobile ? 8 : 12 }}>
+                                    <Input label="Cartão" keyboardType="numeric" value={cardAmount} onChangeText={setCardAmount} placeholder="0.00" style={styles.splitInput} containerStyle={{ marginBottom: 0 }} />
+                                </View>
+                                <Button style={[styles.completeBtn, { backgroundColor: '#3b82f6' }]} onPress={() => autofillRemaining(setCardAmount)} title="Completar" />
+                            </View>
+                            <View style={styles.payRow}>
+                                <View style={{ flex: 1, marginRight: isMobile ? 8 : 12 }}>
+                                    <Input label="Fiado" keyboardType="numeric" value={fiadoAmount} onChangeText={setFiadoAmount} placeholder="0.00" style={styles.splitInput} containerStyle={{ marginBottom: 0 }} />
+                                </View>
+                                <Button style={[styles.completeBtn, { backgroundColor: '#3b82f6' }]} onPress={() => autofillRemaining(setFiadoAmount)} title="Completar" />
+                            </View>
+                            {parseFloat(fiadoAmount) > 0 && (
+                                <View style={{ marginTop: 8 }}>
+                                    <Input label="Nome do Cliente" value={fiadoCustomer} onChangeText={setFiadoCustomer} />
+                                </View>
+                            )}
+                        </View>
+                    )}
 
-                        <View style={styles.summaryBox}>
-                            <Text style={styles.summaryText}>Total Compra: {formatCurrency(calcTotalRequired())}</Text>
+                    <View style={styles.summaryBox}>
+                        <Text style={styles.summaryText}>Total Compra: {formatCurrency(calcTotalRequired())}</Text>
+                        {paymentMode === 'SPLIT' && (
                             <Text style={[styles.summaryText, { color: Math.abs(calcTotalRequired() - calcTotalInputted()) < 0.01 ? '#16a34a' : '#ef4444' }]}>
                                 Soma Pagamentos: {formatCurrency(calcTotalInputted())}
                             </Text>
-                        </View>
+                        )}
+                    </View>
 
-                        <Button title="FINALIZAR VENDA" onPress={registerSale} style={{ marginTop: 16 }} />
-                    </Card>
-                </ScrollView>
-
-                {/* Right Column: History */}
-                <View style={styles.rightColumn}>
-                    <Text style={styles.sectionTitle}>Últimas Vendas</Text>
-                    <FlatList
-                        data={sales}
-                        keyExtractor={item => String(item.id)}
-                        renderItem={renderSaleItem}
-                        contentContainerStyle={{ paddingVertical: 16 }}
-                        showsVerticalScrollIndicator={false}
-                    />
-                </View>
-
+                    <Button title="FINALIZAR VENDA" onPress={registerSale} style={{ marginTop: 16, backgroundColor: '#16a34a' }} />
+                </Card>
             </View>
 
             {/* Product Search Modal */}
             <Modal visible={searchModalVisible} transparent={true} animationType="fade">
                 <View style={styles.modalOverlay}>
-                    <Card style={styles.modalCard}>
+                    <Card style={isMobile ? ({ ...styles.modalCard, padding: 20, maxHeight: '90%' } as any) : styles.modalCard}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Buscar Produto</Text>
-                            <TouchableOpacity onPress={() => setSearchModalVisible(false)}>
-                                <MaterialIcons name="close" size={24} color="#71717a" />
-                            </TouchableOpacity>
+                            <SnappyButton onPress={() => setSearchModalVisible(false)} style={{ padding: 8, backgroundColor: '#f4f4f5', borderRadius: 20 }}>
+                                <MaterialIcons name="close" size={24} color="#09090b" />
+                            </SnappyButton>
                         </View>
 
                         <Input
@@ -283,13 +329,13 @@ export default function SalesScreen() {
                                         setSearchQuery('');
                                     }}
                                 >
-                                    <View>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
                                         <Text style={styles.searchItemName}>{item.name}</Text>
-                                        <Text style={styles.searchItemDetails}>Estoque: {item.quantity} un</Text>
+                                        {item.variation && <Badge variant="secondary" style={{ marginLeft: 8 }}>{item.variation}</Badge>}
                                     </View>
-                                    <View style={{ alignItems: 'flex-end' }}>
+                                    <View style={{ alignItems: 'flex-end', marginLeft: 16 }}>
                                         <Text style={styles.searchItemPrice}>{formatCurrency(item.selling_price)}</Text>
-                                        {item.variation && <Badge variant="secondary" style={{ marginTop: 4 }}>{item.variation}</Badge>}
+                                        <Text style={styles.searchItemDetails}>Estoque: {item.quantity}</Text>
                                     </View>
                                 </TouchableOpacity>
                             )}
@@ -299,41 +345,64 @@ export default function SalesScreen() {
                 </View>
             </Modal>
 
-        </View>
+            {/* Soft Alert Modal */}
+            <Modal visible={!!alertMessage} transparent={true} animationType="fade">
+                <View style={[styles.modalOverlay, { zIndex: 9999 }]}>
+                    <Card style={{ ...styles.modalCard as any, maxWidth: 400, alignItems: 'flex-start', padding: isMobile ? 20 : 32 }}>
+                        <Text style={[{ color: '#09090b', marginBottom: 16, fontSize: 18, fontWeight: 'bold' }]}>Aviso</Text>
+                        <Text style={{ fontSize: 16, color: '#3f3f46', marginBottom: 40, lineHeight: 22 }}>{alertMessage}</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'flex-start', width: '100%' }}>
+                            <Button title="Entendi" onPress={() => setAlertMessage(null)} style={{ backgroundColor: '#3b82f6', width: isMobile ? '100%' : undefined }} />
+                        </View>
+                    </Card>
+                </View>
+            </Modal>
+        </ScrollView>
     );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f4f4f5' },
-    header: { padding: 24, paddingBottom: 16, backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e4e4e7' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
     title: { fontSize: 28, fontWeight: 'bold', color: '#09090b', letterSpacing: -0.5 },
     subtitle: { fontSize: 16, color: '#71717a', marginTop: 4 },
 
-    layoutColumns: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
-    leftColumn: { minWidth: 280, flexBasis: 400, flexGrow: 1, borderRightWidth: 1, borderColor: '#e4e4e7' },
-    rightColumn: { minWidth: 280, flexBasis: 300, flexGrow: 1, padding: 16, backgroundColor: '#fafafa' },
+    formContainer: { maxWidth: 600, width: '100%', alignSelf: 'center' },
 
     sectionTitle: { fontSize: 18, fontWeight: '600', color: '#09090b', marginBottom: 16 },
     pickerWrapper: { borderWidth: 1, borderColor: '#e4e4e7', borderRadius: 8, backgroundColor: '#fff', marginBottom: 16 },
     row: { flexDirection: 'row', alignItems: 'center' },
-    payRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
-    autofillBtn: { marginTop: 6, marginLeft: 8 },
+    payRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 16 },
+    splitInput: { marginBottom: 0, marginTop: 4 },
+    completeBtn: {
+        height: 48,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    toggleRow: { flexDirection: 'row', gap: 12 },
+    toggleBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderRadius: 8, borderWidth: 1 },
+    toggleBtnInactive: { backgroundColor: '#dbeafe', borderColor: '#bfdbfe' },
+    toggleBtnActive: { backgroundColor: '#2563eb', borderColor: '#2563eb', shadowColor: '#2563eb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+    toggleTextInactive: { color: '#1e3a8a', fontWeight: '600', fontSize: 16 },
+    toggleTextActive: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
+
+    methodsGrid: { flexDirection: 'row', flexWrap: 'nowrap', gap: 12 },
+    methodBox: { paddingVertical: 18, paddingHorizontal: 12, borderRadius: 12, alignItems: 'center', borderWidth: 1, width: '100%', minHeight: 60, justifyContent: 'center' },
+    methodBoxInactive: { backgroundColor: '#dbeafe', borderColor: '#bfdbfe' },
+    methodBoxActive: { backgroundColor: '#2563eb', borderColor: '#2563eb', shadowColor: '#2563eb', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+    methodBoxTextInactive: { fontWeight: '600', color: '#1e3a8a', fontSize: 16 },
+    methodBoxTextActive: { fontWeight: '700', color: '#ffffff', fontSize: 16 },
 
     summaryBox: { padding: 16, backgroundColor: '#f4f4f5', borderRadius: 8, marginVertical: 16 },
     summaryText: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
 
-    historyCard: { backgroundColor: '#fff', padding: 16, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#e4e4e7', flexDirection: 'row', alignItems: 'center' },
-    historyTitle: { fontSize: 16, fontWeight: '600', color: '#09090b' },
-    historyTotal: { fontSize: 16, fontWeight: 'bold', color: '#16a34a', marginTop: 4 },
-    historyDate: { fontSize: 12, color: '#a1a1aa', marginTop: 4 },
-    badgesRow: { flexDirection: 'row', flexWrap: 'wrap' },
+    productSelectorBtn: { backgroundColor: '#fff', borderRadius: 8 },
+    productSelectorText: { fontSize: 18, color: '#09090b', fontWeight: '500' },
 
-    productSelectorBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14 },
-    productSelectorText: { fontSize: 16, color: '#09090b' },
-
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
-    modalCard: { width: '100%', maxWidth: 500, padding: 24, maxHeight: '80%' },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+    modalCard: { width: '100%', maxWidth: 500, padding: 32, maxHeight: '85%', backgroundColor: '#fff' },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#09090b' },
     searchItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f4f4f5' },
     searchItemName: { fontSize: 16, fontWeight: '600', color: '#09090b' },

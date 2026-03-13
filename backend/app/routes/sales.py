@@ -18,3 +18,7 @@ def read_sales(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 @router.delete("/{sale_id}")
 def delete_sale(sale_id: int, db: Session = Depends(get_db)):
     return sale_service.delete_sale(db=db, sale_id=sale_id)
+
+@router.put("/{sale_id}", response_model=schemas.SaleResponse)
+def update_sale(sale_id: int, sale_update: schemas.SaleUpdate, db: Session = Depends(get_db)):
+    return sale_service.update_sale(db=db, sale_id=sale_id, sale_update=sale_update)

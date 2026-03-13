@@ -1,12 +1,13 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import { Pressable, Text, StyleSheet, Animated, ViewStyle, TextStyle } from 'react-native';
+import * as Haptics from 'expo-haptics';
 
 interface ButtonProps {
     onPress: () => void;
     title: string;
     variant?: 'default' | 'destructive' | 'outline' | 'ghost' | 'secondary';
-    style?: ViewStyle;
-    textStyle?: TextStyle;
+    style?: ViewStyle | ViewStyle[];
+    textStyle?: TextStyle | TextStyle[];
     disabled?: boolean;
 }
 
@@ -14,15 +15,22 @@ export function Button({ onPress, title, variant = 'default', style, textStyle, 
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
     const handlePressIn = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 0.95,
-            useNativeDriver: true,
-        }).start();
+        if (!disabled) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            Animated.spring(scaleAnim, {
+                toValue: 0.94,
+                speed: 30, // Makes the spring snappy
+                bounciness: 10,
+                useNativeDriver: true,
+            }).start();
+        }
     };
 
     const handlePressOut = () => {
         Animated.spring(scaleAnim, {
             toValue: 1,
+            speed: 30, // Makes the spring snappy
+            bounciness: 10,
             useNativeDriver: true,
         }).start();
     };
@@ -45,7 +53,7 @@ export function Button({ onPress, title, variant = 'default', style, textStyle, 
     const vStyle = getVariantStyles();
 
     return (
-        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
             <Pressable
                 onPressIn={handlePressIn}
                 onPressOut={handlePressOut}
@@ -56,9 +64,9 @@ export function Button({ onPress, title, variant = 'default', style, textStyle, 
                     {
                         backgroundColor: vStyle.bg,
                         borderColor: vStyle.border,
-                        opacity: disabled ? 0.5 : (pressed ? 0.8 : (hovered ? 0.9 : 1))
+                        opacity: disabled ? 0.5 : 1 // Rely mostly on physical bounce
                     },
-                    style
+                    style // Pass user styles here so they override background colors
                 ]}
             >
                 <Text style={[styles.text, { color: vStyle.text }, textStyle]}>{title}</Text>

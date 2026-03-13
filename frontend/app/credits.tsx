@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Modal, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Modal, ScrollView, Alert, useWindowDimensions } from 'react-native';
 import { useStore } from '../store/useStore';
 import { api } from '../services/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
@@ -15,6 +15,10 @@ export default function CreditsScreen() {
     const [selectedCredit, setSelectedCredit] = useState<any>(null);
 
     const [payAmount, setPayAmount] = useState('');
+
+    // Soft Alert State
+    const [alertMessage, setAlertMessage] = useState<string | null>(null);
+    const [confirmAction, setConfirmAction] = useState<{ message: string, onConfirm: () => void } | null>(null);
 
     useEffect(() => {
         fetchProducts();
@@ -48,7 +52,7 @@ export default function CreditsScreen() {
     const submitPayment = async () => {
         const amount = parseFloat(payAmount);
         if (!amount || amount <= 0) {
-            alert('Informe um valor válido.');
+            setAlertMessage('Informe um valor válido.');
             return;
         }
 
@@ -60,35 +64,43 @@ export default function CreditsScreen() {
             setModalVisible(false);
             fetchCredits();
             fetchDashboard();
-            alert('Pagamento registrado com sucesso!');
+            setAlertMessage('Pagamento registrado com sucesso!');
         } catch (e: any) {
-            alert(e.response?.data?.detail || 'Erro ao registrar pagamento');
+            setAlertMessage(e.response?.data?.detail || 'Erro ao registrar pagamento');
         }
     };
 
     const undoPayment = async (paymentId: number) => {
-        if (confirm('Tem certeza que deseja desfazer/estornar este pagamento?')) {
-            try {
-                await api.delete(`/credits/payments/${paymentId}`);
-                fetchCredits();
-                fetchDashboard();
-            } catch (e) {
-                alert('Erro ao estornar pagamento');
+        setConfirmAction({
+            message: 'Tem certeza que deseja desfazer/estornar este pagamento?',
+            onConfirm: async () => {
+                try {
+                    await api.delete(`/credits/payments/${paymentId}`);
+                    fetchCredits();
+                    fetchDashboard();
+                } catch (e) {
+                    setAlertMessage('Erro ao estornar pagamento');
+                }
+                setConfirmAction(null);
             }
-        }
+        });
     };
 
     const deleteCreditCard = async (id: number) => {
-        if (confirm('ATENÇÃO: Isso apagará completamente o registro do fiado e retornará o item ao estoque. Continuar?')) {
-            try {
-                await api.delete(`/credits/${id}`);
-                fetchCredits();
-                fetchProducts();
-                fetchDashboard();
-            } catch (e) {
-                alert('Erro ao excluir');
+        setConfirmAction({
+            message: 'ATENÇÃO: Isso apagará completamente o registro do fiado e retornará o item ao estoque.\n\nContinuar?',
+            onConfirm: async () => {
+                try {
+                    await api.delete(`/credits/${id}`);
+                    fetchCredits();
+                    fetchProducts();
+                    fetchDashboard();
+                } catch (e) {
+                    setAlertMessage('Erro ao excluir');
+                }
+                setConfirmAction(null);
             }
-        }
+        });
     };
 
     const renderCreditItem = ({ item }: { item: any }) => {
@@ -96,15 +108,17 @@ export default function CreditsScreen() {
         const prodName = prod ? prod.name : 'Venda Genérica';
         const remaining = item.total_value - item.paid_amount;
 
+        const cardStyleObj = item.status !== 'PAID' ? { ...styles.card, ...styles.cardDanger } : styles.card;
+
         return (
-            <Card style={[styles.card, item.status !== 'PAID' && styles.cardDanger]}>
+            <Card style={cardStyleObj as any}>
                 <View style={styles.cardHeaderRow}>
                     <Text style={styles.customerName}>{item.customer_name}</Text>
                     {getStatusBadge(item.status)}
                 </View>
                 <CardContent style={{ padding: 16, paddingTop: 0 }}>
                     <Text style={styles.detailText}>{prodName} (x{item.quantity})</Text>
-                    <View style={styles.metricsRow}>
+                    <View style={[styles.metricsRow, isMobile && { flexDirection: 'column', gap: 10 }]}>
                         <View>
                             <Text style={styles.metricLabel}>Total</Text>
                             <Text style={styles.metricValue}>{formatCurrency(item.total_value)}</Text>
@@ -127,22 +141,25 @@ export default function CreditsScreen() {
                             {item.payments.map((p: any) => (
                                 <View key={p.id} style={styles.paymentItem}>
                                     <Text style={{ fontSize: 12 }}>{new Date(p.payment_date).toLocaleDateString()} - {formatCurrency(p.amount)}</Text>
-                                    <Button variant="ghost" title="x Estornar" textStyle={{ fontSize: 10, color: '#ef4444' }} style={{ paddingVertical: 2, paddingHorizontal: 4 }} onPress={() => undoPayment(p.id)} />
+                                    <Button variant="ghost" title="x Estornar" textStyle={{ fontSize: 10, color: '#ef4444' }} style={{ paddingVertical: 2, paddingHorizontal: 4, backgroundColor: '#fef2f2' }} onPress={() => undoPayment(p.id)} />
                                 </View>
                             ))}
                         </View>
                     )}
 
-                    <View style={styles.actionsRow}>
+                    <View style={[styles.actionsRow, isMobile && { flexDirection: 'column', gap: 8 }]}>
                         {item.status !== 'PAID' && (
-                            <Button style={{ flex: 1, marginRight: 8 }} title="Receber Parte/Tudo" onPress={() => openPayModal(item)} />
+                            <Button style={{ flex: 1, marginRight: isMobile ? 0 : 8, backgroundColor: '#3b82f6', width: isMobile ? '100%' : undefined }} title="Receber Parte/Tudo" onPress={() => openPayModal(item)} />
                         )}
-                        <Button variant="outline" title="Apagar Fiado" onPress={() => deleteCreditCard(item.id)} textStyle={{ color: '#ef4444' }} />
+                        <Button title="Apagar Fiado" onPress={() => deleteCreditCard(item.id)} style={{ backgroundColor: '#dc2626', width: isMobile ? '100%' : undefined }} />
                     </View>
                 </CardContent>
             </Card>
         );
     };
+
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
 
     return (
         <View style={styles.container}>
@@ -155,27 +172,56 @@ export default function CreditsScreen() {
                 data={credits}
                 keyExtractor={item => String(item.id)}
                 renderItem={renderCreditItem}
-                contentContainerStyle={{ padding: 24, paddingBottom: 64 }}
+                contentContainerStyle={{ padding: isMobile ? 12 : 24, paddingBottom: 64 }}
             />
 
             <Modal visible={modalVisible} transparent={true} animationType="fade">
-                <View style={styles.modalOverlay}>
-                    <Card style={styles.modalCard}>
+                <View style={[styles.modalOverlay, { zIndex: 999 }]}>
+                    <Card style={{ ...styles.modalCard as any, maxWidth: 400, alignItems: 'center', padding: isMobile ? 20 : 32 }}>
                         {selectedCredit && (
                             <>
-                                <Text style={styles.modalTitle}>Receber de {selectedCredit.customer_name}</Text>
-                                <Text style={{ marginBottom: 16 }}>
+                                <Text style={[styles.modalTitle, { textAlign: 'center' }]}>{selectedCredit.customer_name}</Text>
+                                <Text style={{ marginBottom: 40, fontSize: 16, textAlign: 'center' }}>
                                     Restante a pagar: <Text style={{ fontWeight: 'bold', color: '#ef4444' }}>{formatCurrency(selectedCredit.total_value - selectedCredit.paid_amount)}</Text>
                                 </Text>
 
-                                <Input label="Valor do Pagamento Agora (R$)" keyboardType="numeric" value={payAmount} onChangeText={setPayAmount} />
+                                <View style={{ width: '100%', marginBottom: 16 }}>
+                                    <Input label="Valor do Pagamento Agora (R$)" keyboardType="numeric" value={payAmount} onChangeText={setPayAmount} />
+                                </View>
 
-                                <View style={styles.modalActions}>
-                                    <Button variant="outline" onPress={() => setModalVisible(false)} title="Cancelar" style={{ flex: 1, marginRight: 12 }} />
-                                    <Button onPress={submitPayment} title="Confirmar Pagamento" style={{ flex: 1 }} />
+                                <View style={[styles.modalActions, { justifyContent: 'space-between', gap: 12, width: '100%', marginTop: 24, flexDirection: isMobile ? 'column' : 'row' }]}>
+                                    <Button variant="outline" onPress={() => setModalVisible(false)} title="Cancelar" style={{ flex: 1, width: isMobile ? '100%' : undefined }} />
+                                    <Button onPress={submitPayment} title="Confirmar" style={{ flex: 1, backgroundColor: '#16a34a', width: isMobile ? '100%' : undefined }} />
                                 </View>
                             </>
                         )}
+                    </Card>
+                </View>
+            </Modal>
+
+            {/* Soft Alert Modal */}
+            <Modal visible={!!alertMessage} transparent={true} animationType="fade">
+                <View style={[styles.modalOverlay, { zIndex: 9999 }]}>
+                    <Card style={{ ...styles.modalCard as any, maxWidth: 400, alignItems: 'flex-start', padding: isMobile ? 20 : 32 }}>
+                        <Text style={[{ color: '#09090b', marginBottom: 16, fontSize: 18, fontWeight: 'bold' }]}>Aviso</Text>
+                        <Text style={{ fontSize: 16, color: '#3f3f46', marginBottom: 40, lineHeight: 22 }}>{alertMessage}</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'flex-start', width: '100%' }}>
+                            <Button title="Entendi" onPress={() => setAlertMessage(null)} style={{ backgroundColor: '#3b82f6', width: isMobile ? '100%' : undefined }} />
+                        </View>
+                    </Card>
+                </View>
+            </Modal>
+
+            {/* Soft Confirm Modal */}
+            <Modal visible={!!confirmAction} transparent={true} animationType="fade">
+                <View style={[styles.modalOverlay, { zIndex: 9999 }]}>
+                    <Card style={{ ...styles.modalCard as any, maxWidth: 400, alignItems: 'flex-start', padding: isMobile ? 20 : 32 }}>
+                        <Text style={[{ color: '#09090b', marginBottom: 16, fontSize: 18, fontWeight: 'bold' }]}>Confirmação</Text>
+                        <Text style={{ fontSize: 16, color: '#3f3f46', marginBottom: 40, lineHeight: 22 }}>{confirmAction?.message}</Text>
+                        <View style={{ flexDirection: isMobile ? 'column' : 'row', justifyContent: 'flex-start', width: '100%', gap: 12 }}>
+                            <Button title="Cancelar" variant="outline" onPress={() => setConfirmAction(null)} style={{ width: isMobile ? '100%' : undefined }} />
+                            <Button title="Sim, confirmar" onPress={confirmAction ? confirmAction.onConfirm : () => {}} style={{ backgroundColor: '#dc2626', width: isMobile ? '100%' : undefined }} />
+                        </View>
                     </Card>
                 </View>
             </Modal>
@@ -207,7 +253,7 @@ const styles = StyleSheet.create({
     actionsRow: { flexDirection: 'row', marginTop: 4 },
 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
-    modalCard: { width: '100%', maxWidth: 400, padding: 24 },
-    modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#09090b', marginBottom: 8 },
+    modalCard: { width: '100%', maxWidth: 400, padding: 32, backgroundColor: '#fff' },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#09090b', marginBottom: 8, textAlign: 'center' },
     modalActions: { flexDirection: 'row', marginTop: 16 }
 });

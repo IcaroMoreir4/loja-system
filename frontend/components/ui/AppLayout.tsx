@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, useWindowDimensions, TouchableOpacity, Text, Animated, SafeAreaView } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, useWindowDimensions, TouchableOpacity, Text, SafeAreaView, Modal } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Slot, useRouter, usePathname } from 'expo-router';
 
@@ -17,8 +17,10 @@ export function AppLayout() {
     const router = useRouter();
     const pathname = usePathname();
 
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+
     const handleNav = (route: string) => {
-        // pathname can be /products, nav item name is 'products'. 'index' maps to '/'
+        setIsMenuOpen(false);
         router.push(route === 'index' ? '/' : `/${route}` as any);
     };
 
@@ -34,25 +36,22 @@ export function AppLayout() {
                 key={item.name}
                 style={[
                     styles.navItem,
-                    isLargeScreen ? styles.navItemLarge : styles.navItemSmall,
+                    styles.navItemLarge,
                     active && styles.navItemActive
                 ]}
                 onPress={() => handleNav(item.name)}
             >
                 <MaterialIcons
                     name={item.icon}
-                    size={isLargeScreen ? 24 : 28}
+                    size={24}
                     color={active ? '#18181b' : '#71717a'}
                 />
-                {(isLargeScreen || active) && (
-                    <Text style={[
-                        styles.navLabel,
-                        active ? styles.navLabelActive : styles.navLabelInactive,
-                        !isLargeScreen && { fontSize: 10, marginTop: 4 }
-                    ]}>
-                        {item.label}
-                    </Text>
-                )}
+                <Text style={[
+                    styles.navLabel,
+                    active ? styles.navLabelActive : styles.navLabelInactive
+                ]}>
+                    {item.label}
+                </Text>
             </TouchableOpacity>
         );
     };
@@ -79,17 +78,40 @@ export function AppLayout() {
         );
     }
 
-    // Mobile Layout: Bottom Action Bar
+    // Mobile Layout: Top Header with Hamburger Menu right
     return (
         <View style={styles.containerSmall}>
+            <View style={styles.mobileHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <MaterialIcons name="storefront" size={24} color="#18181b" />
+                    <Text style={styles.mobileHeaderTitle}>Loula Control</Text>
+                </View>
+                <TouchableOpacity onPress={() => setIsMenuOpen(true)} style={{ padding: 8 }}>
+                    <MaterialIcons name="menu" size={28} color="#18181b" />
+                </TouchableOpacity>
+            </View>
+
             <View style={styles.mainContent}>
                 <SafeAreaView style={{ flex: 1 }}>
                     <Slot />
                 </SafeAreaView>
             </View>
-            <View style={styles.bottomBar}>
-                {NAV_ITEMS.map(renderNavItem)}
-            </View>
+
+            <Modal visible={isMenuOpen} transparent animationType="fade">
+                <View style={styles.modalOverlay}>
+                    <View style={styles.mobileMenu}>
+                        <View style={styles.mobileMenuHeader}>
+                            <Text style={styles.mobileMenuTitle}>Menu</Text>
+                            <TouchableOpacity onPress={() => setIsMenuOpen(false)} style={{ padding: 8 }}>
+                                <MaterialIcons name="close" size={28} color="#18181b" />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.sidebarNav}>
+                            {NAV_ITEMS.map(renderNavItem)}
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -103,16 +125,21 @@ const styles = StyleSheet.create({
     sidebarTitle: { fontSize: 20, fontWeight: 'bold', color: '#18181b', marginLeft: 12 },
     sidebarNav: { flex: 1, gap: 8 },
 
-    bottomBar: { flexDirection: 'row', backgroundColor: '#ffffff', borderTopWidth: 1, borderColor: '#e4e4e7', paddingBottom: 24, paddingTop: 12, justifyContent: 'space-around', alignItems: 'center' },
+    mobileHeader: { backgroundColor: '#ffffff', borderBottomWidth: 1, borderColor: '#e4e4e7', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12 },
+    mobileHeaderTitle: { fontSize: 18, fontWeight: 'bold', color: '#18181b', marginLeft: 8 },
+
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-start', alignItems: 'flex-end' },
+    mobileMenu: { width: 250, height: '100%', backgroundColor: '#ffffff', padding: 20, paddingTop: 20, elevation: 5, boxShadow: '0px 0px 10px rgba(0,0,0,0.1)' },
+    mobileMenuHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 },
+    mobileMenuTitle: { fontSize: 20, fontWeight: 'bold', color: '#18181b' },
 
     mainContent: { flex: 1, backgroundColor: '#f4f4f5' },
 
     navItem: { flexDirection: 'row', alignItems: 'center', borderRadius: 8 },
     navItemLarge: { padding: 12 },
-    navItemSmall: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 64 },
     navItemActive: { backgroundColor: '#f4f4f5' },
 
-    navLabel: { marginLeft: 12, fontSize: 14, fontWeight: '500' },
+    navLabel: { marginLeft: 12, fontSize: 16, fontWeight: '500' },
     navLabelActive: { color: '#18181b' },
     navLabelInactive: { color: '#71717a' }
 });
